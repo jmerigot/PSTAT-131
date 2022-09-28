@@ -90,6 +90,8 @@ This question is predictive because it is attempting to predict a future respons
 
 # Exploratory Data Analysis
 
+## Question 1
+
 
 
 
