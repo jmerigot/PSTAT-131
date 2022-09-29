@@ -94,7 +94,20 @@ This question is predictive because it is attempting to predict a future respons
 
 ```{r}
 require(ggplot2)
-hist(mpg.hwy)
+hist(mpg$hwy)
 ```
+The histogram of highway miles per gallon seems so be slightly skewed right with a majority of cars having a highway mileage between 25 mpg and 30 mpg.
+
+## Question 2
+
+```{r}
+plot(mpg$hwy, mpg$cty, main="Highway Mileage vs City Mileage", xlab="Highway MPG",
+     ylab="City MPG", axes=TRUE)
+```
+There is a strong, positive, linear association/relationship between the cars' highway mileage and city mileage. This means that as a car's highway mileage increases, so does its city mileage, and vice versa.
+
+## Question 3
+
+
 
 
