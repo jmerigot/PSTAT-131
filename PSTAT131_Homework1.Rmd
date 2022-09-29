@@ -33,8 +33,9 @@ PSTAT 131/231 Statistical Machine Learning - Fall 2022
 
 **Define supervised and unsupervised learning. What are the difference(s) between them?**
 
-Supervised learning is a branch of machine learning in data science that allows for accurate prediction of future responses given certain known variables, allows for users to directly understand how these known predictors affect results, as well as allows users to find the most accurate model and determine the precision of their estimations.
-Unsupervised learning has "no answer key" (*from 'Lecture: Course Overview and Introduction'*). There is no way to check how well the model did, or how accurate it was. The user is unable to check the results of their estimations or predictions, and therefore cannot judge the accuracy of their model.
+Supervised learning is when the user knows both the "input" and the "output" of their learning model, so the output is being "supervised", which thus allows users to find the most accurate model and determine the precision of their estimations.
+Unsupervised learning is when the user knows the "input", but does not know the "output" of their model, thus has "no answer key" and is "unsupervised". There is no way to check how well the model did, or how accurate it was. The user is unable to check the results of their estimations or predictions, and therefore cannot judge the accuracy of their model.  
+(*from 'Lecture: Course Overview and Introduction'*)  
 The main difference in Supervised Learning v.s. Unsupervised Learning is the that for Supervised Learning, the response is known, while for Unsupervised Learning, the response is not known. This leads to many other differences, including various regression methods that can only be used for Supervised Learned, while Unsupervised Learning uses more clustering methods.
 
 ## Question 2
@@ -57,7 +58,9 @@ Two commonly used metrics for regression ML problems are Mean Squared Error (MSE
 
 * **Inferential models:** Used to find what combinations of model features fit best, in order to predict a response variable Y with a minimum amount of reducible error.
 
-* **Predictive models:** Used to determine which model features are most significant, in order to test certain theories, test causal claims, and find relationships between an outcome and its predictor(s).
+* **Predictive models:** Used to determine which model features are most significant, in order to test certain theories, test causal claims, and find relationships between an outcome and its predictor(s).  
+
+(*from 'Lecture: Course Overview and Introduction'*)
 
 ## Question 5
 
@@ -73,7 +76,7 @@ In general, I believe that a empirically-driven model is easier to understand be
 
 * **Describe how the bias-variance tradeoff is related to the use of mechanistic or empirically-driven models.**
 
-The bias-variance tradeoff is related to the use of mechanistic or empirically-driven models in a variety of ways. In the case of a mechanistic model, since predictions are being made based on theory, there will be higher bias and less variance since certain results will already be expected. In the case of an empirically-driven model, if the training data is strictly followed based on observed events, there will be high variance but much less bias. In either of these cases, the best solution is to find the optimal balance between bias and variance in order to get a good tradeoff.
+The bias-variance tradeoff is related to the use of mechanistic or empirically-driven models in a variety of ways. In the case of a mechanistic model, since predictions are being made based on theory, there will be higher bias from the user and less variance since certain results will already be expected. In the case of an empirically-driven model, if the training data is strictly followed based on observed events, there will be high variance but much less bias. In either of these cases, the best solution is to find the optimal balance between bias and variance in order to get a good tradeoff.
 
 ## Question 6
 
@@ -94,20 +97,41 @@ This question is predictive because it is attempting to predict a future respons
 
 ```{r}
 require(ggplot2)
-hist(mpg$hwy)
+hist(mpg$hwy, main="Histogram of Highway Mileage", xlab="Highway MPG")
 ```
-The histogram of highway miles per gallon seems so be slightly skewed right with a majority of cars having a highway mileage between 25 mpg and 30 mpg.
+The histogram of highway miles per gallon seems so be normal and slightly skewed right with a majority of cars having a highway mileage between 25 mpg and 30 mpg.
 
 ## Question 2
 
 ```{r}
 plot(mpg$hwy, mpg$cty, main="Highway Mileage vs City Mileage", xlab="Highway MPG",
-     ylab="City MPG", axes=TRUE)
+     ylab="City MPG")
 ```
 There is a strong, positive, linear association/relationship between the cars' highway mileage and city mileage. This means that as a car's highway mileage increases, so does its city mileage, and vice versa.
 
 ## Question 3
 
+```{r}
+ggplot(data=mpg, aes(y=reorder(manufacturer, manufacturer, function(y)-length(y)))) + geom_bar(stat="Count") + labs(x="Count", y="Manufacturer")
+```
+According to the manufacturer bar plot, Dodge produced the most cars and Lincoln produced the least cars.
 
+## Question 4
+
+```{r}
+boxplot(formula=hwy ~ cyl, data=mpg, xlab="# of Cylinders", ylab="Highway MPG")
+```
+There is a clear pattern that as the number of cylinders that cars have increases, the highway mileage of the cars will decrease.
+
+## Question 5
+
+```{r}
+library(corrplot)
+
+df <- mpg[,c(-1,-2,-6,-7,-10,-11)]
+M = cor(df)
+corrplot(M, method="square", type='lower', is.corr=FALSE)
+```
+Variables that are positively correlated with each other include *cty* and *hwy*, as well as *displ* and *cyl*. While variables that are negatively correlated include *displ* and *cty*, *displ* and *hwy*, *cyl* and *cty*, as well as *cyl* and *hwy*. For variables *displ* and *year*, *year* and *cty*, *year* and *hwy*, as well as *year* and *cyl*, there seems to be no strong correlation. These relationships all make sense in in context, since city mileage and highway mileage will obviously be positively correlated, while cylinders and highway mileage will be negatively correlated as shown in question 4. I am surprised by the fact that the years of the cars has no correlation to the other variables considering that newer cars tend to be more fuel efficient and would therefore have a high city and highway mileage.
 
 
