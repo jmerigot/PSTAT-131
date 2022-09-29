@@ -92,6 +92,9 @@ This question is predictive because it is attempting to predict a future respons
 
 ## Question 1
 
-
+```{r}
+require(ggplot2)
+hist(mpg.hwy)
+```
 
 
