@@ -48,7 +48,7 @@ At a basic level, the difference between a regression model and a classification
 
 **Name two commonly used metrics for regression ML problems. Name two commonly used metrics for classification ML problems.**
 
-Two commonly used metrics for regression ML problems are Mean Squared Error (MSE) and Mean Absolute Error (RAE). Two commonly used metrics for classification ML problems are Precision and Accuracy.
+Two commonly used metrics for regression ML problems are Mean Squared Error (MSE) and Mean Absolute Error (MAE). Two commonly used metrics for classification ML problems are Precision and Accuracy.
 
 ## Question 4
 
@@ -112,7 +112,9 @@ There is a strong, positive, linear association/relationship between the cars' h
 ## Question 3
 
 ```{r}
-ggplot(data=mpg, aes(y=reorder(manufacturer, manufacturer, function(y)-length(y)))) + geom_bar(stat="Count") + labs(x="Count", y="Manufacturer")
+ggplot(data=mpg, aes(y=reorder(manufacturer, manufacturer, function(y)-length(y)))) + 
+  geom_bar(stat="Count") + 
+  labs(x="Count", y="Manufacturer")
 ```
 According to the manufacturer bar plot, Dodge produced the most cars and Lincoln produced the least cars.
 
