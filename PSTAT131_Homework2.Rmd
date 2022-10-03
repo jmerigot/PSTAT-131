@@ -34,5 +34,18 @@ PSTAT 131/231 Statistical Machine Learning - Fall 2022
 ## Question 1
 
 ```{r}
-aba_data
+# Adding the age variable as a column to the Abalone data frame
+aba_data <- aba_data %>%
+  mutate(age = rings + 1.5)
+
+# Checking to see it was correctly added
+head(aba_data)
+
+# Making a histogram of the age in order to asses the distribution
+hist(aba_data$age)
 ```
+
+Using a histogram, we can see that the age of the abalones is normally distributed and skewed right, with an average age of about 11 years old. While there are more outliers that are older in age, most abalones tend to live between 5 and 15 years.
+
+## Question 2
+
