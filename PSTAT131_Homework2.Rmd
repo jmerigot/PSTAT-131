@@ -1,0 +1,38 @@
+---
+title: "Homework 2"
+author: "Jules Merigot (8488256)"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: pdf_document
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(ISLR)
+
+library(knitr)
+# set global chunk options: images will be 7x5 inches
+knitr::opts_chunk$set(fig.width=7, fig.height=5)
+options(digits = 4)
+
+## indents are for indenting r code as formatted text
+## They may need to be adjusted depending on your OS
+# if your output looks odd, increase or decrease indent
+indent1 = '    '
+indent2 = '        '
+indent3 = '            '
+
+aba_data <- read.csv(file = "C:/Users/jules/OneDrive/Desktop/PSTAT-131/data/abalone.csv")
+```
+
+\begin{center}
+PSTAT 131/231 Statistical Machine Learning - Fall 2022
+\end{center}
+
+# Linear Regression
+
+## Question 1
+
+```{r}
+aba_data
+```
