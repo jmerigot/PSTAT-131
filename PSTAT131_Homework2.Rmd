@@ -39,14 +39,14 @@ PSTAT 131/231 Statistical Machine Learning - Fall 2022
 
 ```{r}
 # Adding the age variable as a column to the Abalone data frame
-aba_data <- aba_data %>%
+abalones <- aba_data %>%
   mutate(age = rings + 1.5)
 
 # Checking to see it was correctly added
-head(aba_data)
+head(abalones)
 
 # Making a histogram of the age in order to asses the distribution
-hist(aba_data$age)
+hist(abalones$age)
 ```
 
 Using a histogram, we can see that the age of the abalones is normally distributed and skewed right, with an average age of about 11 years old. While there are more outliers that are older in age, most abalones tend to live between 5 and 15 years.
@@ -56,7 +56,7 @@ Using a histogram, we can see that the age of the abalones is normally distribut
 ```{r}
 set.seed(52746)
 
-aba_split <- initial_split(aba_data, prop=0.80, strata=age)
+aba_split <- initial_split(abalones, prop=0.80, strata=age)
 
 aba_train <- training(aba_split)
 aba_test <- testing(aba_split)
