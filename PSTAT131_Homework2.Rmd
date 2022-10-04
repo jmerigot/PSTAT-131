@@ -54,10 +54,54 @@ Using a histogram, we can see that the age of the abalones is normally distribut
 ## Question 2
 
 ```{r}
-set.seed(52746)
+set.seed(8488)
 
-aba_split <- initial_split(abalones, prop=0.80, strata=age)
+abalones_split <- initial_split(abalones, prop=0.80, strata=age)
 
-aba_train <- training(aba_split)
-aba_test <- testing(aba_split)
+abalones_train <- training(abalones_split)
+abalones_test <- testing(abalones_split)
+```
+
+## Question 3
+
+I shouldn't include *rings* in the recipe to predict *age* since the *age* variable was calculated and added to the abalones dataset using the *rings* variable. As done in Question 1, we copied the *rings* column and added 1.5 in order to create the *age* column.
+
+```{r, results='hide'}
+abalones_recipe <- recipe(age ~ ., data=abalones_train) %>%
+  step_rm(rings) %>% # removing rings variable
+  step_dummy(all_nominal_predictors()) %>% # Step 1: dummy code categorical predictors
+  step_interact(terms = ~ type_M:shucked_weight) %>% # Step 2: creating interactions
+  step_interact(terms = ~ type_I:shucked_weight) %>%
+  step_interact(terms = ~ longest_shell:diameter) %>%
+  step_interact(terms = ~ shucked_weight:shell_weight) %>%
+  step_center(all_predictors()) %>% # Step 3: centering predictors
+  step_scale(all_predictors()) # Step 4: scaling predictors
+abalones_recipe
+```
+
+## Question 4
+
+```{r}
+lm_model <- linear_reg() %>% 
+  set_engine("lm")
+```
+
+## Question 5
+
+```{r}
+lm_wflow <- workflow() %>% 
+  add_model(lm_model) %>% 
+  add_recipe(abalones_recipe)
+```
+
+## Question 6
+
+```{r}
+lm_fit <- fit(lm_wflow, abalones_train)
+
+lm_fit %>% 
+  # This returns the parsnip object:
+  extract_fit_parsnip() %>% 
+  # Now tidy the linear model object:
+  tidy()
 ```
