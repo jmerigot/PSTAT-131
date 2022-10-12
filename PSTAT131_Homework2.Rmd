@@ -34,6 +34,7 @@ aba_data <- read.csv(file = "C:/Users/jules/OneDrive/Desktop/PSTAT-131/data/abal
 PSTAT 131/231 Statistical Machine Learning - Fall 2022
 \end{center}
 ```
+
 # Linear Regression
 
 ## Question 1
@@ -65,7 +66,7 @@ abalones_test <- testing(abalones_split)
 
 ## Question 3
 
-I shouldn't include *rings* in the recipe to predict *age* since the *age* variable was calculated and added to the abalones dataset using the *rings* variable. As done in Question 1, we copied the *rings* column and added 1.5 in order to create the *age* column.
+We shouldn't include *rings* in the recipe to predict *age* since the *age* variable was calculated and added to the abalones dataset using the *rings* variable. As done in Question 1, we copied the *rings* column and added 1.5 in order to create the *age* column.
 
 ```{r, results='hide'}
 abalone_recipe <- recipe(age ~ ., data=abalones_train) %>%
@@ -84,12 +85,16 @@ abalone_recipe
 
 ## Question 4
 
+Creating and storing a linear regression object using the "lm" engine.
+
 ```{r}
 lm_model <- linear_reg() %>% 
   set_engine("lm")
 ```
 
 ## Question 5
+
+Setting up an empty workflow, adding the model we created in Question 4, and adding the recipe that we created in Question 3.
 
 ```{r}
 lm_wflow <- workflow() %>% 
@@ -100,6 +105,7 @@ lm_wflow <- workflow() %>%
 ## Question 6
 
 ```{r}
+# fitting our model using the training data
 lm_fit <- fit(lm_wflow, abalones_train)
 
 lm_fit %>% 
@@ -108,10 +114,12 @@ lm_fit %>%
   # Now tidy the linear model object:
   tidy()
 
+# making a tibble for a hypothetical female abalone
 new_aba <- tibble(type = "F", longest_shell = 0.50, diameter = 0.10, 
                   height = 0.30, whole_weight = 4, shucked_weight = 1, 
                   viscera_weight = 2, shell_weight = 1, rings = 0)
 
+# using predict() and fit() to predict its age based on the above data
 hypo_abalone <- predict(lm_fit, new_data = new_aba)
 hypo_abalone
 ```
@@ -119,6 +127,8 @@ The age of the hypothetical female abalone with all the above characteristics
 would be approximately 24.45 years old.
 
 ## Question 7
+
+Now, we assess our model's performance.
 
 ```{r}
 # tibble using predict()
