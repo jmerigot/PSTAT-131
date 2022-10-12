@@ -29,10 +29,11 @@ indent3 = '            '
 aba_data <- read.csv(file = "C:/Users/jules/OneDrive/Desktop/PSTAT-131/data/abalone.csv")
 ```
 
+```{=tex}
 \begin{center}
 PSTAT 131/231 Statistical Machine Learning - Fall 2022
 \end{center}
-
+```
 # Linear Regression
 
 ## Question 1
@@ -67,16 +68,18 @@ abalones_test <- testing(abalones_split)
 I shouldn't include *rings* in the recipe to predict *age* since the *age* variable was calculated and added to the abalones dataset using the *rings* variable. As done in Question 1, we copied the *rings* column and added 1.5 in order to create the *age* column.
 
 ```{r, results='hide'}
-abalones_recipe <- recipe(age ~ ., data=abalones_train) %>%
-  step_rm(rings) %>% # removing rings variable
-  step_dummy(all_nominal_predictors()) %>% # Step 1: dummy code categorical predictors
-  step_interact(terms = ~ type_M:shucked_weight) %>% # Step 2: creating interactions
-  step_interact(terms = ~ type_I:shucked_weight) %>%
-  step_interact(terms = ~ longest_shell:diameter) %>%
-  step_interact(terms = ~ shucked_weight:shell_weight) %>%
-  step_center(all_predictors()) %>% # Step 3: centering predictors
-  step_scale(all_predictors()) # Step 4: scaling predictors
-abalones_recipe
+abalone_recipe <- recipe(age ~ ., data=abalones_train) %>%
+  # removing rings variable
+  step_rm(rings) %>%
+  # Step 1: dummy code categorical predictors
+  step_dummy(all_nominal_predictors()) %>% 
+  # Step 2: creating interactions
+  step_interact(terms = ~ starts_with("type"):shucked_weight + 
+                  longest_shell:diameter + shucked_weight:shell_weight) %>%
+  # Step 3 & 4: centering and scaling predictors
+  step_normalize(all_predictors())
+
+abalone_recipe
 ```
 
 ## Question 4
@@ -91,7 +94,7 @@ lm_model <- linear_reg() %>%
 ```{r}
 lm_wflow <- workflow() %>% 
   add_model(lm_model) %>% 
-  add_recipe(abalones_recipe)
+  add_recipe(abalone_recipe)
 ```
 
 ## Question 6
@@ -101,7 +104,38 @@ lm_fit <- fit(lm_wflow, abalones_train)
 
 lm_fit %>% 
   # This returns the parsnip object:
-  extract_fit_parsnip() %>% 
+  extract_fit_parsnip() %>%  
   # Now tidy the linear model object:
   tidy()
+
+new_aba <- tibble(type = "F", longest_shell = 0.50, diameter = 0.10, 
+                  height = 0.30, whole_weight = 4, shucked_weight = 1, 
+                  viscera_weight = 2, shell_weight = 1, rings = 0)
+
+hypo_abalone <- predict(lm_fit, new_data = new_aba)
+hypo_abalone
 ```
+The age of the hypothetical female abalone with all the above characteristics
+would be approximately 24.45 years old.
+
+## Question 7
+
+```{r}
+# tibble using predict()
+abalone_train_res <- predict(lm_fit, new_data = abalones_train %>% select(-age))
+abalone_train_res %>% 
+  head()
+
+#tibble using bind_cols()
+abalone_train_res <- bind_cols(abalone_train_res, abalones_train %>% select(age))
+abalone_train_res %>% 
+  head()
+
+# creating a metric set including R2, RMSE, and MAE
+abalone_metrics <- metric_set(rmse, rsq, mae)
+# applying the metric to the tibble
+abalone_metrics(abalone_train_res, truth = age, 
+                estimate = .pred)
+```
+
+After applying the metric set to the tibble, the results are a R2 value of 0.5693, a RMSE value of 2.1365, and a MAE value of 1.5406. With a R2 value of 0.5693, it can be said that about 57% of the variability observed in the age variable is explained by the linear regression model.
