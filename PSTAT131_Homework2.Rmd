@@ -131,12 +131,14 @@ would be approximately 24.45 years old.
 Now, we assess our model's performance.
 
 ```{r}
+library(yardstick)
+
 # tibble using predict()
 abalone_train_res <- predict(lm_fit, new_data = abalones_train %>% select(-age))
 abalone_train_res %>% 
   head()
 
-#tibble using bind_cols()
+# tibble using bind_cols()
 abalone_train_res <- bind_cols(abalone_train_res, abalones_train %>% select(age))
 abalone_train_res %>% 
   head()
