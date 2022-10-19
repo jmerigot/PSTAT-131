@@ -1,0 +1,162 @@
+---
+title: "Homework 3"
+author: "Jules Merigot (8488256)"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: pdf_document
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(tidymodels)
+library(ISLR)
+library(ISLR2)
+library(corrplot)
+library(ggthemes)
+library(discrim)
+library(poissonreg)
+library(corrr)
+library(klaR) # for naive bayes
+tidymodels_prefer()
+
+library(knitr)
+# set global chunk options: images will be 7x5 inches
+knitr::opts_chunk$set(fig.width=7, fig.height=5)
+options(digits = 4)
+
+## indents are for indenting r code as formatted text
+## They may need to be adjusted depending on your OS
+# if your output looks odd, increase or decrease indent
+indent1 = '    '
+indent2 = '        '
+indent3 = '            '
+
+# loading the data
+titanic_data <- read.csv(file = "C:/Users/jules/OneDrive/Desktop/homework-3/data/titanic.csv")
+head(titanic_data)
+```
+
+# Classification
+
+## Question 1
+
+```{r}
+# setting the seed
+set.seed(8488)
+
+titanic_split <- initial_split(titanic_data, prop=0.60, strata=survived)
+
+titanic_train <- training(titanic_split)
+titanic_test <- testing(titanic_split)
+```
+For splitting the data, I chose a proportion of 0.60 because it allows for more training data, while retaining enough data to be tested since there is a limited amount of observations. The training data has 534 observations while the testing data has 357 observations. 
+
+```{r}
+# missing value in the training data
+head(is.na(titanic_train))
+
+# the number of missing values in the training data
+sum(is.na(titanic_train))
+```
+There is a good amount of missing data in the training data, 522 missing data values to be exact, especially for the *age* variable, as can be seen using the code above.
+  
+We want to use stratified sampling for this data because since we have less observations than the abalone dataset for example, stratified sampling allows for more precision on a smaller dataset, and thus a more precise sample in this case.
+
+## Question 2
+
+```{r}
+titanic_train %>% 
+  ggplot(aes(x = survived)) +
+  geom_bar()
+```
+Using the above visualization of the distribution of the outcome variable *survived*, we can see that less people survived than people that perished on the Titanic. More than 300 (known) passengers lost their lives, while only a little more than 200 passengers survived.
+
+## Question 3
+
+```{r}
+cor_titanic <- titanic_train %>%
+  select(where(is.numeric)) %>%
+  correlate()
+rplot(cor_titanic)
+```
+After making the correlation matrix above, there are some clear patterns that emerge, such as most variables being slightly negatively correlated with others, with some exceptions. *parch* and *sib_sp* have a positive correlation, which means that the # of siblings/spouses of a certain passenger is positively correlated with the # of children/parents of that passenger, which makes sense. Additionally, *fare* and *pclass* are negatively correlated, which indicates that a passenger's fare is negatively correlated with the class of their ticket. This also makes sense, since as passenger's ticket class number decreases from third to first (which is technically increasing), their fare will increase in price.
+
+## Question 4
+
+```{r}
+titanic_recipe <- recipe(survived ~ pclass + sex + age + sib_sp + parch + fare, 
+                         data=titanic_data) %>%
+  step_impute_linear(age, impute_with = imp_vars(all_predictors())) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_interact(terms = ~ sex_male:fare + age:fare) 
+
+titanic_recipe %>% prep() %>% juice()
+```
+
+## Question 5
+
+```{r}
+log_reg <- logistic_reg() %>% 
+  set_engine("glm") %>% 
+  set_mode("classification")
+
+log_wkflow <- workflow() %>% 
+  add_model(log_reg) %>% 
+  add_recipe(titanic_recipe)
+
+log_fit <- fit(log_wkflow, titanic_train)
+
+log_fit %>% 
+  tidy()
+```
+
+## Question 6
+
+```{r}
+lda_mod <- discrim_linear() %>% 
+  set_mode("classification") %>% 
+  set_engine("MASS")
+
+lda_wkflow <- workflow() %>% 
+  add_model(lda_mod) %>% 
+  add_recipe(titanic_recipe)
+
+lda_fit <- fit(lda_wkflow, titanic_train)
+```
+
+## Question 7
+
+```{r}
+qda_mod <- discrim_quad() %>% 
+  set_mode("classification") %>% 
+  set_engine("MASS")
+
+qda_wkflow <- workflow() %>% 
+  add_model(qda_mod) %>% 
+  add_recipe(titanic_recipe)
+
+qda_fit <- fit(qda_wkflow, titanic_train)
+```
+
+## Question 8
+
+```{r}
+nb_mod <- naive_Bayes() %>% 
+  set_mode("classification") %>% 
+  set_engine("klaR") %>% 
+  set_args(usekernel = FALSE) 
+
+nb_wkflow <- workflow() %>% 
+  add_model(nb_mod) %>% 
+  add_recipe(titanic_recipe)
+
+nb_fit <- fit(nb_wkflow, titanic_train)
+```
+
+## Question 9
+
+```{r}
+
+```
+
+
