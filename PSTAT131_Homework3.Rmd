@@ -58,9 +58,9 @@ head(is.na(titanic_train))
 # the number of missing values in the training data
 sum(is.na(titanic_train))
 ```
-There is a good amount of missing data in the training data, 522 missing data values to be exact, especially for the *age* variable, as can be seen using the code above.
+There is a good amount of missing data in the training data, 522 missing data values to be exact, especially for the *age* and *cabin* variables, as can be seen using the code above.
   
-We want to use stratified sampling for this data because since we have less observations than the abalone dataset for example, stratified sampling allows for more precision on a smaller dataset, and thus a more precise sample in this case.
+We want to use stratified sampling for this data because not only does it allow for less bias, but since we have less observations than the abalone dataset for example, stratified sampling allows for more precision on a smaller dataset, and thus a more precise sample in this case.
 
 ## Question 2
 
@@ -85,7 +85,7 @@ After making the correlation matrix above, there are some clear patterns that em
 
 ```{r}
 titanic_recipe <- recipe(survived ~ pclass + sex + age + sib_sp + parch + fare, 
-                         data=titanic_data) %>%
+                         data=titanic_train) %>%
   step_impute_linear(age, impute_with = imp_vars(all_predictors())) %>%
   step_dummy(all_nominal_predictors()) %>%
   step_interact(terms = ~ sex_male:fare + age:fare) 
@@ -156,7 +156,21 @@ nb_fit <- fit(nb_wkflow, titanic_train)
 ## Question 9
 
 ```{r}
+library(yardstick)
 
+predict(log_fit, new_data = titanic_train, type = "prob")
+predict(lda_fit, new_data = titanic_train, type = "prob")
+predict(qda_fit, new_data = titanic_train, type = "prob")
+predict(nb_fit, new_data = titanic_train, type = "prob")
+
+
+augment(log_fit, new_data = titanic_train) %>%
+  conf_mat(truth = survived, estimate = .pred_class) %>%
+  autoplot(type = "heatmap")
+
+log_reg_acc <- augment(log_fit, new_data = titanic_train) %>%
+  accuracy(truth = survived, estimate = .pred_class)
+log_reg_acc
 ```
 
 

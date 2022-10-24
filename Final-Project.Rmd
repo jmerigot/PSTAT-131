@@ -1,0 +1,39 @@
+---
+title: "Final Project"
+author: "Jules Merigot (8488256)"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: html_document
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(tidymodels)
+library(ISLR)
+library(ISLR2)
+library(corrplot)
+library(ggthemes)
+library(discrim)
+library(poissonreg)
+library(corrr)
+library(klaR) # for naive bayes
+tidymodels_prefer()
+
+library(knitr)
+# set global chunk options: images will be 7x5 inches
+knitr::opts_chunk$set(fig.width=7, fig.height=5)
+options(digits = 4)
+
+## indents are for indenting r code as formatted text
+## They may need to be adjusted depending on your OS
+# if your output looks odd, increase or decrease indent
+indent1 = '    '
+indent2 = '        '
+indent3 = '            '
+```
+
+```{r}
+# loading the data
+sunset_data <- read.csv("C:/Users/jules/OneDrive/Desktop/sunset_quality_data.csv")
+head(sunset_data)
+```
