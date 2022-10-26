@@ -17,6 +17,8 @@ library(discrim)
 library(poissonreg)
 library(corrr)
 library(klaR) # for naive bayes
+library(finalfit)
+library(pROC)
 tidymodels_prefer()
 
 library(knitr)
@@ -30,10 +32,17 @@ options(digits = 4)
 indent1 = '    '
 indent2 = '        '
 indent3 = '            '
+```
 
+```{r, results="hide"}
 # loading the data
 titanic_data <- read.csv(file = "C:/Users/jules/OneDrive/Desktop/homework-3/data/titanic.csv")
 head(titanic_data)
+
+titanic_data$survived <- factor(titanic_data$survived, labels = c("Yes", "No"))
+titanic_data$pclass <- factor(titanic_data$pclass)
+
+str(titanic_data)
 ```
 
 # Classification
@@ -52,13 +61,13 @@ titanic_test <- testing(titanic_split)
 For splitting the data, I chose a proportion of 0.60 because it allows for more training data, while retaining enough data to be tested since there is a limited amount of observations. The training data has 534 observations while the testing data has 357 observations. 
 
 ```{r}
-# missing value in the training data
-head(is.na(titanic_train))
+#plot of missing values in the training data
+missing_plot(titanic_train)
 
 # the number of missing values in the training data
 sum(is.na(titanic_train))
 ```
-There is a good amount of missing data in the training data, 522 missing data values to be exact, especially for the *age* and *cabin* variables, as can be seen using the code above.
+There is a good amount of missing data in the training data, 530 missing data values to be exact, particularly for the *age* and *cabin* variables, as can be seen in the plot above.  
   
 We want to use stratified sampling for this data because not only does it allow for less bias, but since we have less observations than the abalone dataset for example, stratified sampling allows for more precision on a smaller dataset, and thus a more precise sample in this case.
 
@@ -79,7 +88,7 @@ cor_titanic <- titanic_train %>%
   correlate()
 rplot(cor_titanic)
 ```
-After making the correlation matrix above, there are some clear patterns that emerge, such as most variables being slightly negatively correlated with others, with some exceptions. *parch* and *sib_sp* have a positive correlation, which means that the # of siblings/spouses of a certain passenger is positively correlated with the # of children/parents of that passenger, which makes sense. Additionally, *fare* and *pclass* are negatively correlated, which indicates that a passenger's fare is negatively correlated with the class of their ticket. This also makes sense, since as passenger's ticket class number decreases from third to first (which is technically increasing), their fare will increase in price.
+After making the correlation matrix above, there are some clear patterns that emerge, such as most variables being slightly negatively correlated with others, with some exceptions. *parch* and *sib_sp* have a positive correlation, which means that the number of siblings/spouses of a certain passenger is positively correlated with the number of children/parents of that passenger, which makes sense. Additionally, *sib_sp* and *age* are negatively correlated, which indicates that a passenger's age is negatively correlated with the number of siblings/spouses they have. This makes sense because younger passengers will tend to travel alone, and thus are less likely to have siblings or spouses.
 
 ## Question 4
 
@@ -155,22 +164,70 @@ nb_fit <- fit(nb_wkflow, titanic_train)
 
 ## Question 9
 
-```{r}
+We now generate predictions of each of the four models using our training data, and we use the accuracy metric to asses their performance.
+```{r, results="hide", warning=FALSE}
 library(yardstick)
 
-predict(log_fit, new_data = titanic_train, type = "prob")
-predict(lda_fit, new_data = titanic_train, type = "prob")
-predict(qda_fit, new_data = titanic_train, type = "prob")
-predict(nb_fit, new_data = titanic_train, type = "prob")
+log_predict <- predict(log_fit, titanic_train) %>%
+  bind_cols(titanic_train$survived) %>%
+  accuracy(truth = titanic_train$survived, estimate = .pred_class)
+log_predict
 
+lda_predict <- predict(lda_fit, titanic_train) %>%
+  bind_cols(titanic_train$survived) %>%
+  accuracy(truth = titanic_train$survived, estimate = .pred_class)
+lda_predict
 
-augment(log_fit, new_data = titanic_train) %>%
+qda_predict <- predict(qda_fit, titanic_train) %>%
+  bind_cols(titanic_train$survived) %>%
+  accuracy(truth = titanic_train$survived, estimate = .pred_class)
+qda_predict
+
+nb_predict <- predict(nb_fit, titanic_train) %>%
+  bind_cols(titanic_train$survived) %>%
+  accuracy(truth = titanic_train$survived, estimate = .pred_class)
+nb_predict
+```
+In order to compare the predictions and discover which model achieved the highest accuracy on the training data, we can make a table of the accuracy rates.
+```{r}
+accuracies <- c(log_predict$.estimate, lda_predict$.estimate, 
+                qda_predict$.estimate, nb_predict$.estimate)
+models <- c("Logistic Regression", "LDA", "QDA", "Naive Bayes")
+results <- tibble(accuracies = accuracies, models = models)
+results %>% 
+  arrange(-accuracies)
+```
+As can be seen in the table above, the logistic regression model achieved the highest accuracy on the training data with an accuracy of 83.15%.
+
+## Question 10
+
+Fitting the model with the highest training accuracy to the testing data. In this case, the logistic regression model.
+```{r}
+test_model_acc <- predict(log_fit, titanic_test) %>%
+  bind_cols(titanic_test$survived) %>%
+  accuracy(truth = titanic_test$survived, estimate = .pred_class)
+test_model_acc
+```
+Fitting the logistic regression model on the testing data yields an accuracy of 80.11%, which is lower than for the training data, but is still rather accurate.
+
+Now, to make a confusion matrix for the testing data and its visualization.
+```{r}
+augment(log_fit, titanic_test) %>%
   conf_mat(truth = survived, estimate = .pred_class) %>%
   autoplot(type = "heatmap")
-
-log_reg_acc <- augment(log_fit, new_data = titanic_train) %>%
-  accuracy(truth = survived, estimate = .pred_class)
-log_reg_acc
 ```
+
+Plotting an ROC curve on the testing data and calculating the area under the curve (AUC).
+```{r}
+test_roc_plot <- augment(log_fit, titanic_test) %>%
+  roc_curve(survived, .pred_Yes) %>%
+  autoplot()
+test_roc_plot
+
+predicted <- predict(log_fit, titanic_test, type = "prob")
+test_auc <- auc(titanic_test$survived, predicted)
+```
+
+
 
 

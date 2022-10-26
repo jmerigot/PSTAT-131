@@ -5,6 +5,25 @@ date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output: html_document
 ---
 
+# Introduction
+
+The aim of this project is to build a machine learning model to predict how beautiful a sunset will be on any given day in the three biggest cities of the wonderful state of California. I will be using self-aggregated data pulled from a Stanford Computer Science Research Study, the official EPA website, and a weather history API source, all of which will be explained in further detail below along with their respective citations. Throughout this project, I will be implementing multiple machine learning techniques to yield the most accurate model for this binary classification problem. 
+
+# Inspiration and Motive
+
+Have you ever sat down and watched a sunset and thought to yourself, "Wow, that is stunning." Me too. Matter of fact, watching sunsets on the beach here in sunny Santa Barbara account for some of my fondest memories during my 4 years at UCSB. The rush of dopamine as you hurry down the street towards the beach, and the shot of serotonin when you run out onto the sand to discover the work of art that Mother Nature has prepared for you, is indescribable. You feel truly alive, and in my experience, when I watch a beautiful sunset, all of my problems seem to wash away in the massive sea that is the beauty of our planet. 
+
+However, with that beauty can also come the feeling of pure disappointment when you miss a once in a lifetime sunset. It's happened to me, it's happened to you, it's happened to all of us, but never again. In fact, I remember sitting on the deck of my house one day, admiring the sunset, and I thought to myself how sad it would be if I had missed it (seen below).
+
+*insert sunset picture*
+
+Then it occurred to me. What if we could predict when there would be a beautiful sunset? I turned the idea over in my head for a while. Most of us are aware of how difficult it is to predict weather already, so imagine predicting a sunset... But I am not one to give up because of something so trivial. I decided that if I was able to accumulate enough data combining past sunsets and their beauty scores, past air quality data, and meteorological data from those days, I would be able to predict the beauty of a sunset on any given day. While beauty is obviously subjective, the scores on which I will be basing my ratings and predictions on have been thoroughly analyzed, and will be explained later in the Data section. If not for me, then for all my friends, family, and fellow students, I want to be able to notify them of an incoming magical moment. The goal of this project is to help those with limited free time and an appreciation for the pureness of our environment to never miss a beautiful sunset again.
+
+# Data
+
+I have myself combined this data into a csv file, binding on specific date and location. The completed dataset includes data on
+
+
 ```{r setup, echo=FALSE, include=FALSE}
 library(ggplot2)
 library(tidyverse)
@@ -32,8 +51,73 @@ indent2 = '        '
 indent3 = '            '
 ```
 
+Relevant links for Data:
+
+https://cs.stanford.edu/~emmap1/sunset_paper.pdf
+https://aqs.epa.gov/aqsweb/airdata/download_files.html
+https://www.visualcrossing.com/weather/weather-data-services#
+
+
 ```{r}
 # loading the data
 sunset_data <- read.csv("C:/Users/jules/OneDrive/Desktop/sunset_quality_data.csv")
 head(sunset_data)
+
+drop <- c("ï..City.and.Date", "Missing.Days....", "Date.of.Last.Change",
+          "severerisk", "stations", "sunrise")
+new_sunset_data = sunset_data[,!(names(sunset_data) %in% drop)]
+head(new_sunset_data)
+
+dim(new_sunset_data)
+```
+
+```{r}
+set.seed(8488)
+sunset_split <- initial_split(sunset_data, prop=0.75, strata=Good.Sunset)
+sunset_train <- training(sunset_split)
+sunset_test <- testing(sunset_split)
+
+
+# missing value in the training data
+head(is.na(sunset_train))
+# the number of missing values in the training data
+sum(is.na(sunset_train))
+
+
+sunset_train %>% 
+  ggplot(aes(x = Good.Sunset)) +
+  geom_bar()
+
+
+cor_sunset <- sunset_train %>%
+  select(where(is.numeric)) %>%
+  correlate()
+rplot(cor_sunset)
+
+new_sunset_data %>%
+  select(is.numeric) %>%
+  cor() %>%
+  corrplot(diagonal = FALSE)
+
+
+sunset_recipe <- recipe(Good.Sunset ~ ., data=sunset_train) %>%
+  step_rm(State.Name, Date.of.Last.Change, ï..City.and.Date, datetime,
+          severerisk, sunrise, sunset, conditions, description, icon, stations) %>%
+  #step_impute_linear(uvindex, impute_with = imp_vars(all_predictors())) %>%
+  step_dummy(all_nominal_predictors())
+sunset_recipe %>% prep() %>% juice()
+
+
+log_reg <- logistic_reg() %>% 
+  set_engine("glm") %>% 
+  set_mode("classification")
+
+log_wkflow <- workflow() %>% 
+  add_model(log_reg) %>% 
+  add_recipe(sunset_recipe)
+
+log_fit <- fit(log_wkflow, sunset_train)
+
+log_fit %>% 
+  tidy()
 ```
