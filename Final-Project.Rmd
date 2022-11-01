@@ -19,7 +19,7 @@ However, with that beauty can also come the feeling of pure disappointment when 
 
 Then it occurred to me. What if we could predict when there would be a beautiful sunset? I turned the idea over in my head for a while. Most of us are aware of how difficult it is to predict weather already, so imagine predicting a sunset... But I am not one to give up because of something so trivial. I decided that if I was able to accumulate enough data combining past sunsets and their beauty scores, past air quality data, and meteorological data from those days, I would be able to predict the beauty of a sunset on any given day. While beauty is obviously subjective, the scores on which I will be basing my ratings and predictions on have been thoroughly analyzed, and will be explained later in the Data section. If not for me, then for all my friends, family, and fellow students, I want to be able to notify them of an incoming magical moment. The goal of this project is to help those with limited free time and an appreciation for the pureness of our environment to never miss a beautiful sunset again.
 
-# Data
+# Exploring Our Data
 
 I have myself combined this data into a csv file, binding on specific date and location. The completed dataset includes data on
 
@@ -36,6 +36,7 @@ library(discrim)
 library(poissonreg)
 library(corrr)
 library(klaR) # for naive bayes
+library(lubridate)
 tidymodels_prefer()
 
 library(knitr)
@@ -57,57 +58,74 @@ https://cs.stanford.edu/~emmap1/sunset_paper.pdf
 https://aqs.epa.gov/aqsweb/airdata/download_files.html
 https://www.visualcrossing.com/weather/weather-data-services#
 
+# Data
+
+We will load the data that I have collected and delete some unnecessary variables. Since I assembled this dataset myself, there will be a lot less cleaning tidying required. However, some predictors that I originally kept will not be needed so they will be removed below. We will also change our response variable `Good.Sunset`, which is currently a binary variable, to be a factor, and we will reorder the factor so that “Yes” is the first level. "Yes" will mean it was a good sunset, and "No" will be... well, its pretty self-explanatory. So let's do it!
 
 ```{r}
 # loading the data
 sunset_data <- read.csv("C:/Users/jules/OneDrive/Desktop/sunset_quality_data.csv")
-head(sunset_data)
+
+# Make a factor?
+sunset_data$Good.Sunset <- factor(sunset_data$Good.Sunset, labels = c("Yes", "No"))
 
 drop <- c("ï..City.and.Date", "Missing.Days....", "Date.of.Last.Change",
           "severerisk", "stations", "sunrise")
-new_sunset_data = sunset_data[,!(names(sunset_data) %in% drop)]
-head(new_sunset_data)
+sunset_data = sunset_data[,!(names(sunset_data) %in% drop)]
+head(sunset_data)
 
-dim(new_sunset_data)
+dim(sunset_data)
+str(sunset_data)
+
+dates <- as.POSIXct(sunset_data$Date, format = "%m/%d/%Y")
+head(format(dates, format="%m-%Y"))
 ```
 
 ```{r}
 set.seed(8488)
 sunset_split <- initial_split(sunset_data, prop=0.75, strata=Good.Sunset)
 sunset_train <- training(sunset_split)
+dim(sunset_train)
 sunset_test <- testing(sunset_split)
+dim(sunset_test)
 
 
 # missing value in the training data
 head(is.na(sunset_train))
+# plot of missing values in the data
+missing_plot(sunset_train)
 # the number of missing values in the training data
 sum(is.na(sunset_train))
+```
 
+# Visual EDA
 
+```{r}
+# looking at the distribution of the Good Sunsets
 sunset_train %>% 
   ggplot(aes(x = Good.Sunset)) +
   geom_bar()
 
-
+# making a correlation matrix of the predictors
 cor_sunset <- sunset_train %>%
   select(where(is.numeric)) %>%
   correlate()
 rplot(cor_sunset)
 
-new_sunset_data %>%
+sunset_data %>%
   select(is.numeric) %>%
   cor() %>%
   corrplot(diagonal = FALSE)
 
 
+# making the recipe (work in progress...)
 sunset_recipe <- recipe(Good.Sunset ~ ., data=sunset_train) %>%
-  step_rm(State.Name, Date.of.Last.Change, ï..City.and.Date, datetime,
-          severerisk, sunrise, sunset, conditions, description, icon, stations) %>%
+  step_rm(State.Name, datetime, sunset, conditions, description, icon) %>%
   #step_impute_linear(uvindex, impute_with = imp_vars(all_predictors())) %>%
   step_dummy(all_nominal_predictors())
 sunset_recipe %>% prep() %>% juice()
 
-
+# logistical regression model as an example
 log_reg <- logistic_reg() %>% 
   set_engine("glm") %>% 
   set_mode("classification")

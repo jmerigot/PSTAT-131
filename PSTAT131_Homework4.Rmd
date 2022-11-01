@@ -1,0 +1,148 @@
+---
+title: "Homework 4"
+author: "Jules Merigot (8488256)"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: pdf_document
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(tidymodels)
+library(ISLR)
+library(ISLR2)
+library(corrplot)
+library(ggthemes)
+library(discrim)
+library(poissonreg)
+library(corrr)
+library(klaR) # for naive bayes
+library(finalfit)
+library(pROC)
+tidymodels_prefer()
+
+library(knitr)
+# set global chunk options: images will be 7x5 inches
+knitr::opts_chunk$set(fig.width=7, fig.height=5)
+options(digits = 4)
+
+## indents are for indenting r code as formatted text
+## They may need to be adjusted depending on your OS
+# if your output looks odd, increase or decrease indent
+indent1 = '    '
+indent2 = '        '
+indent3 = '            '
+```
+
+# Resampling
+
+Before we get started, let's first load the titanic data and change the `survived` and `pclass` variables to factors. 
+```{r, results="hide"}
+# loading the data
+titanic_data <- read.csv(file = "C:/Users/jules/OneDrive/Desktop/homework-4/data/titanic.csv")
+head(titanic_data)
+
+titanic_data$survived <- factor(titanic_data$survived, labels = c("Yes", "No"))
+titanic_data$pclass <- factor(titanic_data$pclass)
+
+str(titanic_data)
+```
+
+Next, let's now make our recipe, while accounting for missing values and creating the proper interactions.
+```{r}
+titanic_recipe <- recipe(survived ~ pclass + sex + age + sib_sp + parch + fare, 
+                         data=titanic_train) %>%
+  step_impute_linear(age, impute_with = imp_vars(all_predictors())) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_interact(terms = ~ sex_male:fare + age:fare) 
+
+titanic_recipe %>% prep() %>% juice()
+```
+
+## Question 1
+
+Let's set a seed, and randomly split the data to create a training and testing set. We'll choose appropriate proportions and stratify on the outcome variable, `survived`.
+```{r}
+# setting the seed
+set.seed(8488)
+
+titanic_split <- initial_split(titanic_data, prop=0.70, strata=survived)
+
+titanic_train <- training(titanic_split)
+titanic_test <- testing(titanic_split)
+```
+For splitting the data, I chose a proportion of 0.70 because it allows for more training data, while retaining enough data to be tested since there is a limited amount of observations. The training data has 623 observations while the testing data has 268 observations.
+
+## Question 2
+
+Now, we fold the training data using k-fold cross-validation, with k=10 (represented by v in the ISLR package terminology).
+```{r}
+titanic_folds <- vfold_cv(titanic_train, v = 10)
+titanic_folds
+```
+
+## Question 3
+
+In Question 2 above, we are randomly splitting our titanic training dataset into 10 groups or folds, as denoted by the parameter k, of approximately equal size. Essentially, k-fold cross validation is a statistical method or resampling procedure used to evaluate the skill of machine learning models on a limited dataset. When fitting the model, the model is trained on (k-1) folds and tested on the one left out fold. This process is then repeated k times until the model is trained and tested on all the folds. This method allows for users to fit and test models on various groups of data, as designated by the k=10 folds, which is easy to implement and thus results in skill estimates that generally have a lower bias than other methods. If instead we used a resampling method on the entire training set, it would be considered the Validation Set Approach, which purely uses a training dataset to test and fit the model, and then a testing dataset to fit the final model.
+
+## Question 4
+
+We will now set up workflows for 3 models:    
+
+A logistic regression with the glm engine.
+```{r}
+log_reg <- logistic_reg() %>% 
+  set_engine("glm") %>% 
+  set_mode("classification")
+
+log_wkflow <- workflow() %>% 
+  add_model(log_reg) %>% 
+  add_recipe(titanic_recipe)
+
+# log_fit <- fit(log_wkflow, titanic_train)
+```
+
+A linear discriminant analysis with the MASS engine.
+```{r}
+lda_mod <- discrim_linear() %>% 
+  set_mode("classification") %>% 
+  set_engine("MASS")
+
+lda_wkflow <- workflow() %>% 
+  add_model(lda_mod) %>% 
+  add_recipe(titanic_recipe)
+
+# lda_fit <- fit(lda_wkflow, titanic_train)
+```
+
+A quadratic discriminant analysis with the MASS engine.
+```{r}
+qda_mod <- discrim_quad() %>% 
+  set_mode("classification") %>% 
+  set_engine("MASS")
+
+qda_wkflow <- workflow() %>% 
+  add_model(qda_mod) %>% 
+  add_recipe(titanic_recipe)
+
+# qda_fit <- fit(qda_wkflow, titanic_train)
+```
+
+With 10 folds and with the 3 models created above, we will be fitting a total of 30 models to the data.
+
+## Question 5
+
+We will now fit each of the created models to the folded data.
+```{r}
+degree_grid <- grid_regular(degree(range = c(1, 10)), levels = 10)
+degree_grid
+
+tune_res <- tune_grid(
+  object = log_wkflow, 
+  resamples = titanic_folds, 
+  grid = degree_grid,
+  control = control_grid(verbose = TRUE)
+)
+
+log_fit <- fit(log_wkflow, titanic_folds)
+```
