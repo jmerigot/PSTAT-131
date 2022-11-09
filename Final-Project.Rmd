@@ -1,15 +1,21 @@
 ---
-title: "Final Project"
-author: "Jules Merigot (8488256)"
-date: "`r format(Sys.Date(), '%B %d, %Y')`"
+title: "Predicting Beautiful Sunsets"
+subtitle: "Using Machine Learning Models to Predict the Aesthetic Quality of a California Sunset on Any Given Day"
+author: "Jules Merigot"
+date: "PSTAT 131 Statistical Machine Learning - UCSB Fall 2022"
 output: html_document
 ---
+
+Token: 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
+```{r}
+
+```
 
 # Introduction
 
 The aim of this project is to build a machine learning model to predict how beautiful a sunset will be on any given day in the three biggest cities of the wonderful state of California. I will be using self-aggregated data pulled from a Stanford Computer Science Research Study, the official EPA website, and a weather history API source, all of which will be explained in further detail below along with their respective citations. Throughout this project, I will be implementing multiple machine learning techniques to yield the most accurate model for this binary classification problem. 
 
-# Inspiration and Motive
+## Inspiration and Motive
 
 Have you ever sat down and watched a sunset and thought to yourself, "Wow, that is stunning." Me too. Matter of fact, watching sunsets on the beach here in sunny Santa Barbara account for some of my fondest memories during my 4 years at UCSB. The rush of dopamine as you hurry down the street towards the beach, and the shot of serotonin when you run out onto the sand to discover the work of art that Mother Nature has prepared for you, is indescribable. You feel truly alive, and in my experience, when I watch a beautiful sunset, all of my problems seem to wash away in the massive sea that is the beauty of our planet. 
 
@@ -19,9 +25,15 @@ However, with that beauty can also come the feeling of pure disappointment when 
 
 Then it occurred to me. What if we could predict when there would be a beautiful sunset? I turned the idea over in my head for a while. Most of us are aware of how difficult it is to predict weather already, so imagine predicting a sunset... But I am not one to give up because of something so trivial. I decided that if I was able to accumulate enough data combining past sunsets and their beauty scores, past air quality data, and meteorological data from those days, I would be able to predict the beauty of a sunset on any given day. While beauty is obviously subjective, the scores on which I will be basing my ratings and predictions on have been thoroughly analyzed, and will be explained later in the Data section. If not for me, then for all my friends, family, and fellow students, I want to be able to notify them of an incoming magical moment. The goal of this project is to help those with limited free time and an appreciation for the pureness of our environment to never miss a beautiful sunset again.
 
-# Exploring Our Data
+## Exploring Our Data
 
 I have myself combined this data into a csv file, binding on specific date and location. The completed dataset includes data on
+
+Relevant links for Data:
+
+https://cs.stanford.edu/~emmap1/sunset_paper.pdf
+https://aqs.epa.gov/aqsweb/airdata/download_files.html
+https://www.visualcrossing.com/weather/weather-data-services#
 
 
 ```{r setup, echo=FALSE, include=FALSE}
@@ -36,7 +48,9 @@ library(discrim)
 library(poissonreg)
 library(corrr)
 library(klaR) # for naive bayes
-library(lubridate)
+library(finalfit)
+library(pROC)
+library(usethis)
 tidymodels_prefer()
 
 library(knitr)
@@ -52,12 +66,6 @@ indent2 = '        '
 indent3 = '            '
 ```
 
-Relevant links for Data:
-
-https://cs.stanford.edu/~emmap1/sunset_paper.pdf
-https://aqs.epa.gov/aqsweb/airdata/download_files.html
-https://www.visualcrossing.com/weather/weather-data-services#
-
 # Data
 
 We will load the data that I have collected and delete some unnecessary variables. Since I assembled this dataset myself, there will be a lot less cleaning tidying required. However, some predictors that I originally kept will not be needed so they will be removed below. We will also change our response variable `Good.Sunset`, which is currently a binary variable, to be a factor, and we will reorder the factor so that “Yes” is the first level. "Yes" will mean it was a good sunset, and "No" will be... well, its pretty self-explanatory. So let's do it!
@@ -66,36 +74,50 @@ We will load the data that I have collected and delete some unnecessary variable
 # loading the data
 sunset_data <- read.csv("C:/Users/jules/OneDrive/Desktop/sunset_quality_data.csv")
 
-# Make a factor?
-sunset_data$Good.Sunset <- factor(sunset_data$Good.Sunset, labels = c("Yes", "No"))
 
 drop <- c("ï..City.and.Date", "Missing.Days....", "Date.of.Last.Change",
-          "severerisk", "stations", "sunrise")
+          "severerisk", "stations", "sunrise", "description", 
+          "snow", "snowdepth", "windgust", "solarenergy", "solarradiation",
+          "uvindex")
 sunset_data = sunset_data[,!(names(sunset_data) %in% drop)]
-head(sunset_data)
 
-dim(sunset_data)
-str(sunset_data)
+
+# Make a factor?
+sunset_data$Good.Sunset <- factor(sunset_data$Good.Sunset)
 
 dates <- as.POSIXct(sunset_data$Date, format = "%m/%d/%Y")
-head(format(dates, format="%m-%Y"))
+
+sunset_data <- sunset_data %>%
+  add_column("year" = c(format(dates, format="%Y")), .before = 1) %>%
+  add_column("month" = c(format(dates, format="%m")), .before = 1)
+
+# make Month and Year numeric variables 
+sunset_data$month <- as.numeric(as.character(sunset_data$month))
+sunset_data$year <- as.numeric(as.character(sunset_data$year))
+
+sunset_data %>% dim()
+
+sunset_data %>% str()
+
+sunset_data %>% head()
+
+# plot of missing values in the data
+sunset_data %>%
+  missing_plot()
+
+# the number of missing values in the training data
+sum(is.na(sunset_data))
 ```
 
 ```{r}
 set.seed(8488)
+
 sunset_split <- initial_split(sunset_data, prop=0.75, strata=Good.Sunset)
+
 sunset_train <- training(sunset_split)
 dim(sunset_train)
 sunset_test <- testing(sunset_split)
 dim(sunset_test)
-
-
-# missing value in the training data
-head(is.na(sunset_train))
-# plot of missing values in the data
-missing_plot(sunset_train)
-# the number of missing values in the training data
-sum(is.na(sunset_train))
 ```
 
 # Visual EDA
@@ -113,21 +135,30 @@ cor_sunset <- sunset_train %>%
 rplot(cor_sunset)
 
 sunset_data %>%
-  select(is.numeric) %>%
+  select(where(is.numeric)) %>%
   cor() %>%
-  corrplot(diagonal = FALSE)
+  corrplot()
+```
 
-
+```{r}
 # making the recipe (work in progress...)
-sunset_recipe <- recipe(Good.Sunset ~ ., data=sunset_train) %>%
-  step_rm(State.Name, datetime, sunset, conditions, description, icon) %>%
+sunset_recipe <- recipe(Good.Sunset ~ tempmax + humidity +  cloudcover, data=sunset_train)
+  #step_rm(Date, City, City.Name, preciptype, State.Name, datetime, sunset, conditions, icon) %>%
   #step_impute_linear(uvindex, impute_with = imp_vars(all_predictors())) %>%
-  step_dummy(all_nominal_predictors())
+  #step_dummy(all_nominal_predictors())
 sunset_recipe %>% prep() %>% juice()
 
+Sunset_recipe <- recipe(Good.Sunset ~ ., data=sunset_train) %>%
+  step_rm(Date, State.Name, datetime, sunset, conditions, icon) %>%
+  #step_impute_linear(SO2..in.parts.per.billion., impute_with = imp_vars(all_predictors())) %>%
+  step_dummy(all_nominal_predictors())
+Sunset_recipe %>% prep() %>% juice()
+```
+
+```{r}
 # logistical regression model as an example
 log_reg <- logistic_reg() %>% 
-  set_engine("glm") %>% 
+  set_engine("glm") %>%
   set_mode("classification")
 
 log_wkflow <- workflow() %>% 
@@ -135,7 +166,26 @@ log_wkflow <- workflow() %>%
   add_recipe(sunset_recipe)
 
 log_fit <- fit(log_wkflow, sunset_train)
+predict(log_fit, new_data = sunset_train, type="prob") %>% View()
 
 log_fit %>% 
   tidy()
+
+sunset_train$Good.Sunset %>% table()
+```
+
+# Building Prediction Models
+
+## K-Fold Cross-Validation
+
+```{r}
+sunset_folds <- vfold_cv(sunset_train, v = 10)
+sunset_folds
+
+log_kfold_fit <- fit_resamples(log_wkflow, sunset_folds)
+
+collect_metrics(log_kfold_fit)
+
+#lasso
+#standardize predictors
 ```
