@@ -6,11 +6,6 @@ date: "PSTAT 131 Statistical Machine Learning - UCSB Fall 2022"
 output: html_document
 ---
 
-Token: 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
-```{r}
-
-```
-
 # Introduction
 
 The aim of this project is to build a machine learning model to predict how beautiful a sunset will be on any given day in the three biggest cities of the wonderful state of California. I will be using self-aggregated data pulled from a Stanford Computer Science Research Study, the official EPA website, and a weather history API source, all of which will be explained in further detail below along with their respective citations. Throughout this project, I will be implementing multiple machine learning techniques to yield the most accurate model for this binary classification problem. 
@@ -83,7 +78,7 @@ sunset_data = sunset_data[,!(names(sunset_data) %in% drop)]
 
 
 # Make a factor?
-sunset_data$Good.Sunset <- factor(sunset_data$Good.Sunset)
+sunset_data$Good.Sunset <- factor(sunset_data$Good.Sunset, labels = c("No", "Yes"))
 
 dates <- as.POSIXct(sunset_data$Date, format = "%m/%d/%Y")
 
@@ -129,11 +124,6 @@ sunset_train %>%
   geom_bar()
 
 # making a correlation matrix of the predictors
-cor_sunset <- sunset_train %>%
-  select(where(is.numeric)) %>%
-  correlate()
-rplot(cor_sunset)
-
 sunset_data %>%
   select(where(is.numeric)) %>%
   cor() %>%
@@ -147,12 +137,6 @@ sunset_recipe <- recipe(Good.Sunset ~ tempmax + humidity +  cloudcover, data=sun
   #step_impute_linear(uvindex, impute_with = imp_vars(all_predictors())) %>%
   #step_dummy(all_nominal_predictors())
 sunset_recipe %>% prep() %>% juice()
-
-Sunset_recipe <- recipe(Good.Sunset ~ ., data=sunset_train) %>%
-  step_rm(Date, State.Name, datetime, sunset, conditions, icon) %>%
-  #step_impute_linear(SO2..in.parts.per.billion., impute_with = imp_vars(all_predictors())) %>%
-  step_dummy(all_nominal_predictors())
-Sunset_recipe %>% prep() %>% juice()
 ```
 
 ```{r}
