@@ -1,6 +1,7 @@
 ---
-title: "Predicting Beautiful Sunsets"
-subtitle: "Using Machine Learning Models to Predict the Aesthetic Quality of a California Sunset on Any Given Day"
+title: "PREDICTING BEAUTIFUL SUNSETS"
+subtitle: "Using Machine Learning Models and Social Media Data to Predict the Aesthetic Quality of a California Sunset"
+
 author: "Jules Merigot"
 date: "PSTAT 131 Statistical Machine Learning - UCSB Fall 2022"
 output: html_document
@@ -46,6 +47,7 @@ library(klaR) # for naive bayes
 library(finalfit)
 library(pROC)
 library(usethis)
+library(janitor)
 tidymodels_prefer()
 
 library(knitr)
@@ -63,29 +65,51 @@ indent3 = '            '
 
 # Data
 
-We will load the data that I have collected and delete some unnecessary variables. Since I assembled this dataset myself, there will be a lot less cleaning tidying required. However, some predictors that I originally kept will not be needed so they will be removed below. We will also change our response variable `Good.Sunset`, which is currently a binary variable, to be a factor, and we will reorder the factor so that “Yes” is the first level. "Yes" will mean it was a good sunset, and "No" will be... well, its pretty self-explanatory. So let's do it!
+We will load the data that I have collected and delete some unnecessary variables. Since I assembled this dataset myself, there will be a lot less cleaning tidying required.
 
 ```{r}
 # loading the data
 sunset_data <- read.csv("C:/Users/jules/OneDrive/Desktop/sunset_quality_data.csv")
 
+# cleaning predictor names
+sunset_data <- clean_names(sunset_data)
+head(sunset_data)
+```
 
-drop <- c("ï..City.and.Date", "Missing.Days....", "Date.of.Last.Change",
+While this data was assembled by hand, there may still be some missing data. This happens often when collecting meteorological data if instruments are not working properly that day, or due to external factors not under our control. So let's check for missing data in our dataset. We'll make a missing plot to better visualize which variables are missing data points.
+```{r}
+# plot of missing values in the data
+sunset_data %>%
+  missing_plot()
+
+# the number of missing values in the training data
+sum(is.na(sunset_data))
+```
+Wow! As we can see in our missing values plot, we're missing a lot of data for `windgust`, `solarradiation`, `solarenergy`, `uvindex`, and `severerisk`. With so much missing data in all these predictors, we will be forced to remove them from the dataset entirely because it will otherwise impede on our predictions and cause errors.   
+
+Let's drop the variables with too much missing data. Additionally, some predictors that I originally kept will also not be needed so they will be removed below. We will also change our response variable `good_sunset`, which is currently a binary variable, to be a factor, and reorder the factor so that “Yes” is the first level. "Yes" will mean it was a good sunset, and "No" will be... well, its pretty self-explanatory. So let's do it!
+```{r}
+drop <- c("i_city_and_date", "missing_days", "date_of_last_change",
           "severerisk", "stations", "sunrise", "description", 
           "snow", "snowdepth", "windgust", "solarenergy", "solarradiation",
           "uvindex")
 sunset_data = sunset_data[,!(names(sunset_data) %in% drop)]
 
+# Make good_sunset a factor
+sunset_data$good_sunset <- factor(sunset_data$good_sunset, labels = c("No", "Yes"))
+```
 
-# Make a factor?
-sunset_data$Good.Sunset <- factor(sunset_data$Good.Sunset, labels = c("No", "Yes"))
-
-dates <- as.POSIXct(sunset_data$Date, format = "%m/%d/%Y")
+One of our variables `date` which distinguishes the date of a particular sunset, is currently in mm/dd/yyyy format, which is difficult to use in a prediction or classification model, so let's extract the month and year from each value and make them their own predictors. The specific days won't matter as much here, but the particular month will have an impact since it traverses across seasons (November to May). It is commonly known that sunsets tend to be more vivid in color in the winter months, therefore there may be a significant difference in prediction results if a particular sunset's quality was evaluated in December of 2015 compared to one in May of 2016.
+```{r}
+dates <- as.POSIXct(sunset_data$date, format = "%m/%d/%Y")
 
 sunset_data <- sunset_data %>%
   add_column("year" = c(format(dates, format="%Y")), .before = 1) %>%
   add_column("month" = c(format(dates, format="%m")), .before = 1)
+```
 
+Now that we've added these columns, let's make them numeric variables so they can be used in our reciped later on without being dummy coded.
+```{r}
 # make Month and Year numeric variables 
 sunset_data$month <- as.numeric(as.character(sunset_data$month))
 sunset_data$year <- as.numeric(as.character(sunset_data$year))
@@ -95,32 +119,28 @@ sunset_data %>% dim()
 sunset_data %>% str()
 
 sunset_data %>% head()
-
-# plot of missing values in the data
-sunset_data %>%
-  missing_plot()
-
-# the number of missing values in the training data
-sum(is.na(sunset_data))
 ```
 
+Now, we'll set our seed, and create our initial split of the data to create our training and testing data sets which we will be referencing and using throughout this project.
 ```{r}
 set.seed(8488)
 
-sunset_split <- initial_split(sunset_data, prop=0.75, strata=Good.Sunset)
+sunset_split <- initial_split(sunset_data, prop=0.75, strata=good_sunset)
 
 sunset_train <- training(sunset_split)
 dim(sunset_train)
 sunset_test <- testing(sunset_split)
 dim(sunset_test)
 ```
+For splitting the data, I chose a proportion of 0.75 because it allows for more training data, while retaining enough data to be tested since there is a limited amount of observations. The training data has 402 observations while the testing data has 136 observations.  
+
 
 # Visual EDA
 
 ```{r}
 # looking at the distribution of the Good Sunsets
 sunset_train %>% 
-  ggplot(aes(x = Good.Sunset)) +
+  ggplot(aes(x = good_sunset)) +
   geom_bar()
 
 # making a correlation matrix of the predictors
@@ -132,7 +152,10 @@ sunset_data %>%
 
 ```{r}
 # making the recipe (work in progress...)
-sunset_recipe <- recipe(Good.Sunset ~ tempmax + humidity +  cloudcover, data=sunset_train)
+sunset_recipe <- recipe(good_sunset ~ tempmax + humidity +  cloudcover + aqi +
+                          windspeed +  sealevelpressure + month +
+                          ozone_in_parts_per_million, data=sunset_train) %>%
+  step_interact(terms = ~ humidity:cloudcover)
   #step_rm(Date, City, City.Name, preciptype, State.Name, datetime, sunset, conditions, icon) %>%
   #step_impute_linear(uvindex, impute_with = imp_vars(all_predictors())) %>%
   #step_dummy(all_nominal_predictors())
@@ -150,12 +173,12 @@ log_wkflow <- workflow() %>%
   add_recipe(sunset_recipe)
 
 log_fit <- fit(log_wkflow, sunset_train)
-predict(log_fit, new_data = sunset_train, type="prob") %>% View()
+predict(log_fit, new_data = sunset_train, type="prob") #%>% View()
 
 log_fit %>% 
   tidy()
 
-sunset_train$Good.Sunset %>% table()
+#sunset_train$Good.Sunset %>% table()
 ```
 
 # Building Prediction Models
@@ -172,4 +195,18 @@ collect_metrics(log_kfold_fit)
 
 #lasso
 #standardize predictors
+```
+
+Plotting an ROC curve on the testing data and calculating the area under the curve (AUC).
+```{r}
+roc <- augment(log_fit, sunset_train)
+
+# plotting the ROC curve
+roc %>%
+  roc_curve(good_sunset, .pred_No) %>%
+  autoplot()
+
+# calculating the AUC of the curve
+roc %>%
+  roc_auc(good_sunset, .pred_No)
 ```

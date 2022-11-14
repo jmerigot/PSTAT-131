@@ -1,0 +1,164 @@
+---
+title: "Homework 5"
+author: "Jules Merigot (8488256)"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: pdf_document
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(tidymodels)
+library(ISLR)
+library(ISLR2)
+library(corrplot)
+library(ggthemes)
+library(discrim)
+library(poissonreg)
+library(corrr)
+library(klaR) # for naive bayes
+library(finalfit)
+library(pROC)
+library(glmnet)
+tidymodels_prefer()
+
+library(knitr)
+# set global chunk options: images will be 7x5 inches
+knitr::opts_chunk$set(fig.width=7, fig.height=5)
+options(digits = 4)
+
+## indents are for indenting r code as formatted text
+## They may need to be adjusted depending on your OS
+# if your output looks odd, increase or decrease indent
+indent1 = '    '
+indent2 = '        '
+indent3 = '            '
+```
+
+\begin{center}
+PSTAT 131/231 Statistical Machine Learning - Fall 2022
+\end{center}
+
+# Elastic Net Tuning
+
+Before we get started, let's load the Pokemon data in into our workspace.
+```{r}
+pokemon_data <- read.csv(file = "C:/Users/jules/OneDrive/Desktop/homework-5/data/Pokemon.csv")
+head(pokemon_data)
+```
+
+# Exercise 1
+
+Let's load the janitor package, and use its `clean_names()` function on the Pokémon data. We'll save the results to work with for the rest of the assignment.
+```{r, warning=FALSE}
+library(janitor)
+
+Pokemon_data <- clean_names(pokemon_data)
+head(Pokemon_data)
+```
+As we can see in the data above, the names of each column have been changed to simpler, more efficient, and unique names using strictly the "_" character, numbers, and letters. This shows how useful `clean_names()` is, because it allows for a rapid change in the varaible and predictor names, thus allowing them to be referenced and used more efficiently in the rest of project or assignment being completed.
+
+## Exercise 2
+
+Using the entire data set, let's create a bar chart of the outcome variable, `type_1`.
+```{r}
+Pokemon_data %>%
+  ggplot(aes(x=type_1)) +
+  geom_bar()
+```
+There are 18 classes of the outcome `type_1`, which means there are 18 different types of Pokemon. While there are many Pokemon of the "Water" type, there are very few Pokemon of the "Flying" type.   
+For this assignment, we’ll handle the rarer classes by simply filtering them out. Let's filter the entire data set to contain only Pokemon whose `type_1` is Bug, Fire, Grass, Normal, Water, or Psychic.
+```{r, warning=FALSE}
+filt_types <- c("Bug", "Fire", "Grass", "Normal", "Water", "Pyschic")
+
+Pokemon_data %>%
+  filter(type_1 == filt_types) %>%
+  head()
+```
+Now that we're done filtering, let's convert `type_1` and `legendary` to factors.
+```{r}
+Pokemon_data$type_1 <- factor(Pokemon_data$type_1)
+Pokemon_data$legendary <- factor(Pokemon_data$legendary)
+```
+
+## Exercise 3
+
+Let's perform an initial split of the data, and stratify by the outcome variable.
+```{r}
+set.seed(8488)
+
+Pokemon_split <- initial_split(Pokemon_data, prop=0.70, strata=type_1)
+
+Pokemon_train <- training(Pokemon_split)
+Pokemon_test <- testing(Pokemon_split)
+```
+For splitting the data, I chose a proportion of 0.70 because it allows for more training data, while retaining enough data to be tested since there is a limited amount of observations. The training data has 559 observations while the testing data has 241 observations.   
+
+Next, let's use v-fold cross-validation on the training set, using 5 folds. We'll stratify the folds by `type_1` as well.
+```{r}
+Pokemon_folds <- vfold_cv(Pokemon_train, v = 5, strata=type_1)
+```
+In this case, stratifying the folds is useful to ensure that each fold is representative of all strata of the data.
+
+## Exercise 4
+
+Let's set up a recipe to predict `type_1` with `legendary`, `generation`, `sp_atk`, `attack`, `speed`, `defense`, `hp`, and `sp_def`. We'll also dummy-code `legendary` and `generation`, as well as center and scale all predictors.
+```{r}
+Pokemon_recipe <- recipe(type_1 ~ legendary + generation + sp_atk + attack +
+                           speed + defense + hp + sp_def, data=Pokemon_train) %>%
+  #step_novel(legendary, generation) %>%
+  step_dummy(legendary, generation) %>%
+  step_normalize(all_predictors())
+
+Pokemon_recipe %>% prep() %>% juice()
+```
+
+## Exercise 5
+
+We’ll be fitting and tuning an elastic net, tuning `penalty` and `mixture` (using `multinom_reg` with the `glmnet` engine).  
+
+Let's set up this model and workflow. We'll create a regular grid for `penalty` and `mixture` with 10 levels each; `mixture` will range from 0 to 1. For this assignment, we’ll let `penalty` range from -5 to 5 (it’s log-scaled).
+
+```{r}
+Pokemon_ridge_spec <- multinom_reg(penalty = tune(), mixture = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+Pokemon_ridge_workflow <- workflow() %>% 
+  add_recipe(Pokemon_recipe) %>% 
+  add_model(Pokemon_ridge_spec)
+
+p <- parameters(penalty(range = c(-5, 5)), mixture(range = c(0,1)))
+
+pen_mix_grid <- grid_regular(p, levels = 5)
+pen_mix_grid
+
+test_grid <- grid_regular(penalty(), mixture(), levels=10)
+test_grid
+
+penalty_grid <- grid_regular(penalty(range = c(-5, 5)), levels = 10)
+penalty_grid
+mixture_grid <- grid_regular(mixture(range = c(0, 1)), levels = 10)
+mixture_grid
+```
+
+How many total models will you be fitting when you fit these models to your folded data?
+
+
+## Exercise 6
+
+Let's fit the models to our folded data using `tune_grid()`.
+```{r}
+tune_res <- tune_grid(
+  Pokemon_ridge_workflow,
+  resamples = Pokemon_folds, 
+  grid = pen_mix_grid
+)
+tune_res
+```
+
+We now use `autoplot()` on the results. 
+```{r}
+autoplot(tune_res)
+```
+What do you notice? Do larger or smaller values of penalty and mixture produce better accuracy and ROC AUC?
