@@ -5,34 +5,19 @@ date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output: pdf_document
 ---
 
-```{r setup, echo=FALSE, include=FALSE}
-library(ggplot2)
+```{r setup, include=FALSE}
+library(MASS)
+library(dplyr)
 library(tidyverse)
 library(tidymodels)
 library(ISLR)
 library(ISLR2)
-library(corrplot)
-library(ggthemes)
 library(discrim)
-library(poissonreg)
-library(corrr)
-library(klaR) # for naive bayes
-library(finalfit)
-library(pROC)
 library(glmnet)
 tidymodels_prefer()
 
 library(knitr)
-# set global chunk options: images will be 7x5 inches
-knitr::opts_chunk$set(fig.width=7, fig.height=5)
-options(digits = 4)
-
-## indents are for indenting r code as formatted text
-## They may need to be adjusted depending on your OS
-# if your output looks odd, increase or decrease indent
-indent1 = '    '
-indent2 = '        '
-indent3 = '            '
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
 \begin{center}
@@ -47,13 +32,14 @@ pokemon_data <- read.csv(file = "C:/Users/jules/OneDrive/Desktop/homework-5/data
 head(pokemon_data)
 ```
 
-# Exercise 1
+## Exercise 1
 
 Let's load the janitor package, and use its `clean_names()` function on the Pokémon data. We'll save the results to work with for the rest of the assignment.
 ```{r, warning=FALSE}
 library(janitor)
 
-Pokemon_data <- clean_names(pokemon_data)
+Pokemon_data <- pokemon_data %>%
+  clean_names()
 head(Pokemon_data)
 ```
 As we can see in the data above, the names of each column have been changed to simpler, more efficient, and unique names using strictly the "_" character, numbers, and letters. This shows how useful `clean_names()` is, because it allows for a rapid change in the varaible and predictor names, thus allowing them to be referenced and used more efficiently in the rest of project or assignment being completed.
@@ -69,16 +55,15 @@ Pokemon_data %>%
 There are 18 classes of the outcome `type_1`, which means there are 18 different types of Pokemon. While there are many Pokemon of the "Water" type, there are very few Pokemon of the "Flying" type.   
 For this assignment, we’ll handle the rarer classes by simply filtering them out. Let's filter the entire data set to contain only Pokemon whose `type_1` is Bug, Fire, Grass, Normal, Water, or Psychic.
 ```{r, warning=FALSE}
-filt_types <- c("Bug", "Fire", "Grass", "Normal", "Water", "Pyschic")
-
-Pokemon_data %>%
-  filter(type_1 == filt_types) %>%
-  head()
+Pokemon_data <- subset(Pokemon_data, type_1 == c("Bug", "Fire", "Grass", 
+                                                 "Normal", "Water", "Psychic"))
 ```
-Now that we're done filtering, let's convert `type_1` and `legendary` to factors.
+
+Now that we're done filtering, let's convert `type_1`, `legendary`, and `generation` to factors.
 ```{r}
 Pokemon_data$type_1 <- factor(Pokemon_data$type_1)
 Pokemon_data$legendary <- factor(Pokemon_data$legendary)
+Pokemon_data$generation <- factor(Pokemon_data$generation)
 ```
 
 ## Exercise 3
@@ -106,8 +91,7 @@ Let's set up a recipe to predict `type_1` with `legendary`, `generation`, `sp_at
 ```{r}
 Pokemon_recipe <- recipe(type_1 ~ legendary + generation + sp_atk + attack +
                            speed + defense + hp + sp_def, data=Pokemon_train) %>%
-  #step_novel(legendary, generation) %>%
-  step_dummy(legendary, generation) %>%
+  step_dummy(c(legendary, generation)) %>%
   step_normalize(all_predictors())
 
 Pokemon_recipe %>% prep() %>% juice()
@@ -120,45 +104,80 @@ We’ll be fitting and tuning an elastic net, tuning `penalty` and `mixture` (us
 Let's set up this model and workflow. We'll create a regular grid for `penalty` and `mixture` with 10 levels each; `mixture` will range from 0 to 1. For this assignment, we’ll let `penalty` range from -5 to 5 (it’s log-scaled).
 
 ```{r}
-Pokemon_ridge_spec <- multinom_reg(penalty = tune(), mixture = tune()) %>%
+Pokemon_spec <- multinom_reg(penalty = tune(), mixture = tune()) %>%
   set_mode("classification") %>%
   set_engine("glmnet")
 
-Pokemon_ridge_workflow <- workflow() %>% 
+Pokemon_workflow <- workflow() %>% 
   add_recipe(Pokemon_recipe) %>% 
-  add_model(Pokemon_ridge_spec)
+  add_model(Pokemon_spec)
 
-p <- parameters(penalty(range = c(-5, 5)), mixture(range = c(0,1)))
-
-pen_mix_grid <- grid_regular(p, levels = 5)
+pen_mix_grid <- grid_regular(penalty(range = c(-5, 5)), mixture(range = c(0,1)), levels = 10)
 pen_mix_grid
-
-test_grid <- grid_regular(penalty(), mixture(), levels=10)
-test_grid
-
-penalty_grid <- grid_regular(penalty(range = c(-5, 5)), levels = 10)
-penalty_grid
-mixture_grid <- grid_regular(mixture(range = c(0, 1)), levels = 10)
-mixture_grid
 ```
-
-How many total models will you be fitting when you fit these models to your folded data?
+Since we have 10 levels for penalty and 10 levels mixture as well as 5 folds for the training data, we will be fitting a total of 500 models when fitting these models to our folded data.
 
 
 ## Exercise 6
 
 Let's fit the models to our folded data using `tune_grid()`.
-```{r}
+```{r, warning=FALSE, results='hide'}
 tune_res <- tune_grid(
-  Pokemon_ridge_workflow,
+  Pokemon_workflow,
   resamples = Pokemon_folds, 
   grid = pen_mix_grid
 )
-tune_res
 ```
-
 We now use `autoplot()` on the results. 
 ```{r}
 autoplot(tune_res)
 ```
-What do you notice? Do larger or smaller values of penalty and mixture produce better accuracy and ROC AUC?
+As we can see in the plots above, larger values of penalty tend to produce lower accuracy values and lower ROC AUC values for each mixture level, while smaller values of penalty tend to produce higher accuracy and ROC AUC values. Additionally, larger values of mixture tend to produce more consistent accuracy and ROC AUC across all penalty levels.
+
+## Exercise 7
+
+Let's use `select_best()` to choose the model that has the optimal `roc_auc`.
+```{r}
+collect_metrics(tune_res)
+
+best_penalty <- select_best(tune_res, metric = "roc_auc")
+best_penalty
+```
+We can see above the model that has the optimal `roc_auc`.   
+
+Then we'll use `finalize_workflow()`, `fit()`, and `augment()` to fit the model to the training set and evaluate its performance on the testing set.
+```{r, warning=FALSE}
+lasso_final <- finalize_workflow(Pokemon_workflow, best_penalty)
+
+lasso_final_fit <- fit(lasso_final, data = Pokemon_train)
+
+augment(lasso_final_fit, new_data = Pokemon_test) %>%
+  accuracy(truth = type_1, estimate = .pred_class)
+```
+
+## Exercise 8
+
+Almost there! Now let's calculate the overall ROC AUC on the testing set.
+```{r}
+roc <- augment(lasso_final_fit, Pokemon_test)
+
+roc %>%
+  roc_auc(type_1, c(.pred_Bug, .pred_Fire, .pred_Grass, .pred_Normal, 
+                    .pred_Water, .pred_Psychic))
+```
+
+Then we'll create plots of the different ROC curves, one per level of the outcome. 
+```{r}
+roc %>%
+  roc_curve(type_1, c(.pred_Bug, .pred_Fire, .pred_Grass, .pred_Normal, 
+                    .pred_Psychic, .pred_Water)) %>%
+  autoplot()
+```
+
+Finally, we'll also make a heat map of the confusion matrix.
+```{r}
+augment(lasso_final_fit, new_data = Pokemon_test) %>%
+  conf_mat(truth = type_1, estimate = .pred_class) %>%
+  autoplot(type = "heatmap")
+```
+As we can see from our overall ROC AUC value of 0.5879 on the testing dataset, our model did not do too great. Generally, AUC values between 0.6 and 0.5 are considered to be poor results. However, our model did a surprisingly good job at predicting Pokemon of types Normal and Fire, while doing a worse job of predicting Pokemon of types Bug and Water. Since Normal type is the second most common Pokemon type in our dataset, it makes sense that our modle could predict it better since it has more training data to work with in that category. However, this contradicts the fact that Water type is the most common but has one of the worst ROC AUC values. The most likely reason for this, is that Water types have a large variety of possible secondary types (`type_2`), which is most likely interfering with the prediction quality of our model. This is confirmed when we look at Fire type, which has a smaller variety of second types.

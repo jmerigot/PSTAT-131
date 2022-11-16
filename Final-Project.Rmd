@@ -32,8 +32,10 @@ https://aqs.epa.gov/aqsweb/airdata/download_files.html
 https://www.visualcrossing.com/weather/weather-data-services#
 
 
-```{r setup, echo=FALSE, include=FALSE}
+```{r setup, include=FALSE}
 library(ggplot2)
+library(MASS)
+library(dplyr)
 library(tidyverse)
 library(tidymodels)
 library(ISLR)
@@ -41,6 +43,7 @@ library(ISLR2)
 library(corrplot)
 library(ggthemes)
 library(discrim)
+library(glmnet)
 library(poissonreg)
 library(corrr)
 library(klaR) # for naive bayes
@@ -51,16 +54,7 @@ library(janitor)
 tidymodels_prefer()
 
 library(knitr)
-# set global chunk options: images will be 7x5 inches
-knitr::opts_chunk$set(fig.width=7, fig.height=5)
-options(digits = 4)
-
-## indents are for indenting r code as formatted text
-## They may need to be adjusted depending on your OS
-# if your output looks odd, increase or decrease indent
-indent1 = '    '
-indent2 = '        '
-indent3 = '            '
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Data
@@ -73,7 +67,6 @@ sunset_data <- read.csv("C:/Users/jules/OneDrive/Desktop/sunset_quality_data.csv
 
 # cleaning predictor names
 sunset_data <- clean_names(sunset_data)
-head(sunset_data)
 ```
 
 While this data was assembled by hand, there may still be some missing data. This happens often when collecting meteorological data if instruments are not working properly that day, or due to external factors not under our control. So let's check for missing data in our dataset. We'll make a missing plot to better visualize which variables are missing data points.
@@ -87,16 +80,17 @@ sum(is.na(sunset_data))
 ```
 Wow! As we can see in our missing values plot, we're missing a lot of data for `windgust`, `solarradiation`, `solarenergy`, `uvindex`, and `severerisk`. With so much missing data in all these predictors, we will be forced to remove them from the dataset entirely because it will otherwise impede on our predictions and cause errors.   
 
-Let's drop the variables with too much missing data. Additionally, some predictors that I originally kept will also not be needed so they will be removed below. We will also change our response variable `good_sunset`, which is currently a binary variable, to be a factor, and reorder the factor so that “Yes” is the first level. "Yes" will mean it was a good sunset, and "No" will be... well, its pretty self-explanatory. So let's do it!
+Let's drop the variables with too much missing data. Additionally, some predictors that I originally kept will also not be needed so they will be removed below. We will also change our response variable `good_sunset`, which is currently a binary variable, to be a factor, and reorder the factor so that “Yes” is the second level. "Yes" will mean it was a good sunset, and "No" will be... well, its pretty self-explanatory. So let's do it!
 ```{r}
 drop <- c("i_city_and_date", "missing_days", "date_of_last_change",
           "severerisk", "stations", "sunrise", "description", 
           "snow", "snowdepth", "windgust", "solarenergy", "solarradiation",
-          "uvindex")
+          "uvindex", "residual_after_controlling_for_time")
 sunset_data = sunset_data[,!(names(sunset_data) %in% drop)]
 
 # Make good_sunset a factor
-sunset_data$good_sunset <- factor(sunset_data$good_sunset, labels = c("No", "Yes"))
+sunset_data$good_sunset <- factor(sunset_data$good_sunset, 
+                                  labels = c("No", "Yes"))
 ```
 
 One of our variables `date` which distinguishes the date of a particular sunset, is currently in mm/dd/yyyy format, which is difficult to use in a prediction or classification model, so let's extract the month and year from each value and make them their own predictors. The specific days won't matter as much here, but the particular month will have an impact since it traverses across seasons (November to May). It is commonly known that sunsets tend to be more vivid in color in the winter months, therefore there may be a significant difference in prediction results if a particular sunset's quality was evaluated in December of 2015 compared to one in May of 2016.
@@ -108,7 +102,7 @@ sunset_data <- sunset_data %>%
   add_column("month" = c(format(dates, format="%m")), .before = 1)
 ```
 
-Now that we've added these columns, let's make them numeric variables so they can be used in our reciped later on without being dummy coded.
+Now that we've added these columns, let's make them numeric variables so they can be used in our recipe later on without being dummy coded.
 ```{r}
 # make Month and Year numeric variables 
 sunset_data$month <- as.numeric(as.character(sunset_data$month))
@@ -152,9 +146,11 @@ sunset_data %>%
 
 ```{r}
 # making the recipe (work in progress...)
-sunset_recipe <- recipe(good_sunset ~ tempmax + humidity +  cloudcover + aqi +
+sunset_recipe <- recipe(good_sunset ~ tempmax + tempmin + humidity +  
+                          cloudcover + aqi + precip + 
                           windspeed +  sealevelpressure + month +
-                          ozone_in_parts_per_million, data=sunset_train) %>%
+                          ozone_in_parts_per_million + visibility, 
+                        data=sunset_train) %>%
   step_interact(terms = ~ humidity:cloudcover)
   #step_rm(Date, City, City.Name, preciptype, State.Name, datetime, sunset, conditions, icon) %>%
   #step_impute_linear(uvindex, impute_with = imp_vars(all_predictors())) %>%
@@ -199,7 +195,7 @@ collect_metrics(log_kfold_fit)
 
 Plotting an ROC curve on the testing data and calculating the area under the curve (AUC).
 ```{r}
-roc <- augment(log_fit, sunset_train)
+roc <- augment(log_fit, sunset_test)
 
 # plotting the ROC curve
 roc %>%
@@ -210,3 +206,63 @@ roc %>%
 roc %>%
   roc_auc(good_sunset, .pred_No)
 ```
+
+# Lasso
+
+```{r}
+sunset_spec <- multinom_reg(penalty = tune(), mixture = tune()) %>%
+  set_mode("classification") %>%
+  set_engine("glmnet")
+
+sunset_workflow <- workflow() %>% 
+  add_recipe(sunset_recipe) %>% 
+  add_model(sunset_spec)
+
+pen_mix_grid <- grid_regular(penalty(range = c(-5, 5)), mixture(range = c(0,1)), levels = 10)
+pen_mix_grid
+```
+
+Let's fit the models to our folded data using `tune_grid()`.
+```{r, warning=FALSE, results='hide'}
+tune_res <- tune_grid(
+  sunset_workflow,
+  resamples = sunset_folds, 
+  grid = pen_mix_grid
+)
+
+autoplot(tune_res)
+```
+
+Let's use `select_best()` to choose the model that has the optimal `roc_auc`.
+```{r}
+collect_metrics(tune_res)
+
+best_penalty <- select_best(tune_res, metric = "roc_auc")
+best_penalty
+```
+
+Then we'll use `finalize_workflow()`, `fit()`, and `augment()` to fit the model to the training set and evaluate its performance on the testing set.
+```{r, warning=FALSE}
+lasso_final <- finalize_workflow(sunset_workflow, best_penalty)
+
+lasso_final_fit <- fit(lasso_final, data = sunset_train)
+
+augment(lasso_final_fit, new_data = sunset_test) %>%
+  accuracy(truth = good_sunset, estimate = .pred_class)
+```
+
+Almost there! Now let's calculate the overall ROC AUC on the testing set.
+```{r}
+roc <- augment(lasso_final_fit, sunset_test)
+
+roc %>%
+  roc_auc(good_sunset, .pred_No)
+```
+
+Then we'll create plots of the ROC curve. 
+```{r}
+roc %>%
+  roc_curve(good_sunset, .pred_No) %>%
+  autoplot()
+```
+
