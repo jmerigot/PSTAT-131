@@ -1,10 +1,18 @@
 ---
-title: "PREDICTING BEAUTIFUL SUNSETS"
+title: "Predicting Beautiful Sunsets"
 subtitle: "Using Machine Learning Models and Social Media Data to Predict the Aesthetic Quality of a California Sunset"
 
 author: "Jules Merigot"
-date: "PSTAT 131 Statistical Machine Learning - UCSB Fall 2022"
-output: html_document
+date: "UCSB Fall 2022"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    df_print: paged
+    theme: sandstone
+    highlight: tango
 ---
 
 # Introduction
@@ -21,7 +29,7 @@ However, with that beauty can also come the feeling of pure disappointment when 
 
 Then it occurred to me. What if we could predict when there would be a beautiful sunset? I turned the idea over in my head for a while. Most of us are aware of how difficult it is to predict weather already, so imagine predicting a sunset... But I am not one to give up because of something so trivial. I decided that if I was able to accumulate enough data combining past sunsets and their beauty scores, past air quality data, and meteorological data from those days, I would be able to predict the beauty of a sunset on any given day. While beauty is obviously subjective, the scores on which I will be basing my ratings and predictions on have been thoroughly analyzed, and will be explained later in the Data section. If not for me, then for all my friends, family, and fellow students, I want to be able to notify them of an incoming magical moment. The goal of this project is to help those with limited free time and an appreciation for the pureness of our environment to never miss a beautiful sunset again.
 
-## Exploring Our Data
+## Data Description
 
 I have myself combined this data into a csv file, binding on specific date and location. The completed dataset includes data on
 
@@ -35,6 +43,7 @@ https://www.visualcrossing.com/weather/weather-data-services#
 ```{r setup, include=FALSE}
 library(ggplot2)
 library(MASS)
+library(plyr)
 library(dplyr)
 library(tidyverse)
 library(tidymodels)
@@ -57,9 +66,15 @@ library(knitr)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Data
+## Project Outline
+
+
+
+# Exploring Our Data
 
 We will load the data that I have collected and delete some unnecessary variables. Since I assembled this dataset myself, there will be a lot less cleaning tidying required.
+
+## Loading and Exploring the Data
 
 ```{r}
 # loading the data
@@ -79,13 +94,14 @@ sunset_data %>%
 sum(is.na(sunset_data))
 ```
 Wow! As we can see in our missing values plot, we're missing a lot of data for `windgust`, `solarradiation`, `solarenergy`, `uvindex`, and `severerisk`. With so much missing data in all these predictors, we will be forced to remove them from the dataset entirely because it will otherwise impede on our predictions and cause errors.   
+## Tidying the Data
 
 Let's drop the variables with too much missing data. Additionally, some predictors that I originally kept will also not be needed so they will be removed below. We will also change our response variable `good_sunset`, which is currently a binary variable, to be a factor, and reorder the factor so that “Yes” is the second level. "Yes" will mean it was a good sunset, and "No" will be... well, its pretty self-explanatory. So let's do it!
 ```{r}
-drop <- c("i_city_and_date", "missing_days", "date_of_last_change",
-          "severerisk", "stations", "sunrise", "description", 
+drop <- c("i_city_and_date", "missing_days", "date_of_last_change", "datetime", 
+          "severerisk", "stations", "sunrise", "description", "city_name", 
           "snow", "snowdepth", "windgust", "solarenergy", "solarradiation",
-          "uvindex", "residual_after_controlling_for_time")
+          "uvindex", "residual_after_controlling_for_time", "state_name")
 sunset_data = sunset_data[,!(names(sunset_data) %in% drop)]
 
 # Make good_sunset a factor
@@ -93,13 +109,17 @@ sunset_data$good_sunset <- factor(sunset_data$good_sunset,
                                   labels = c("No", "Yes"))
 ```
 
-One of our variables `date` which distinguishes the date of a particular sunset, is currently in mm/dd/yyyy format, which is difficult to use in a prediction or classification model, so let's extract the month and year from each value and make them their own predictors. The specific days won't matter as much here, but the particular month will have an impact since it traverses across seasons (November to May). It is commonly known that sunsets tend to be more vivid in color in the winter months, therefore there may be a significant difference in prediction results if a particular sunset's quality was evaluated in December of 2015 compared to one in May of 2016.
+One of our variables `date` which distinguishes the date of a particular sunset, is currently in mm/dd/yyyy format, which is difficult to use in a prediction or classification model, so let's extract the month and year from each value and make them their own predictors. The specific days won't matter as much here, but the particular month will have an impact since it traverses across seasons (November to May). It is commonly known that sunsets tend to be more vivid in color in the winter months, therefore there may be a significant difference in prediction results if a particular sunset's quality was evaluated in December of 2015 compared to one in May of 2016. While we're at it, let's also rename out air quality variables to something shorter so they take up less room in our visual plots later on. Don't worry, I'll explain what each one is in a bit. 
 ```{r}
 dates <- as.POSIXct(sunset_data$date, format = "%m/%d/%Y")
 
 sunset_data <- sunset_data %>%
   add_column("year" = c(format(dates, format="%Y")), .before = 1) %>%
-  add_column("month" = c(format(dates, format="%m")), .before = 1)
+  add_column("month" = c(format(dates, format="%m")), .before = 1) %>%
+  plyr::rename(c("co_in_parts_per_million" = "co_in_ppm",
+         "no2_in_parts_per_billion" = "no2_in_ppb",
+         "so2_in_parts_per_billion" = "so2_in_ppb",
+         "ozone_in_parts_per_million" = "ozone_in_ppm"))
 ```
 
 Now that we've added these columns, let's make them numeric variables so they can be used in our recipe later on without being dummy coded.
@@ -110,12 +130,69 @@ sunset_data$year <- as.numeric(as.character(sunset_data$year))
 
 sunset_data %>% dim()
 
-sunset_data %>% str()
-
 sunset_data %>% head()
 ```
 
-Now, we'll set our seed, and create our initial split of the data to create our training and testing data sets which we will be referencing and using throughout this project.
+## Describing the Predictors
+
+The variables that I selected for the true data set are as following:  
+
+- `month`: The month that the sunset was recorded (ranges from November 2015 to May 2016) as represented by its respective number (e.g. 11 for November)   
+- `year`: The year that the sunset was recorded (either 2015 or 2016)   
+- `city`: The city in which the sunset was recorded (either Los Angeles, San Francisco, or San Diego)
+- `raw_number_of_posts`: The number of Instagram posts recorded and analyzed for that sunset
+- `latitude`: The latitude coordinates of the sunset
+- `longitude`: The longitude coordinates of the sunset
+- `co_in_ppm`: The carbon monoxide CO) levels in the air on the given day of the sunset, measured in parts per million
+- `no2_in_ppm`: The nitrogen dioxide (NO2) levels in the air on the given day of the sunset, measured in parts per million
+- `so2_in_ppm`: The sulfur dioxide (SO2) levels in the air on the given day of the sunset, measured in parts per million
+- `ozone_in_ppm`: The ozone (O3) levels in the air on the given day of the sunset, measured in parts per million
+- `aqi`: The air quality index on the given day of the sunset in the city it took place
+- `tempmax`: The maximum recorded temperature on the given day of the sunset in the city in took place
+- `tempmin`: The minimum recorded temperature on the given day of the sunset in the city in took place
+- `temp`: The average recorded temperature on the given day of the sunset in the city in took place
+- `dew`:
+- `humidity`:
+- `precip`:
+- `precipprob`:
+- `precipcover`:
+- 
+
+
+## Visual EDA
+
+To get a better idea of the particular distribution of our response variable and our predictors, we'll generate an output variable plot as well a correlation matrix to identify potential correlation between our predictor variables.
+
+### Good Sunset Distribution
+
+One important thing to note before diving deeper into building our models, is to realize that beautiful sunsets are heavily outweighed in occurrence by poorer sunsets. This is expected of course, but can you imagine how awesome it would be if there was a stunning sunset every night!? I would never be able to get any work done! Anyways, below we can see a plot of the distribution of the sunsets and their respective aesthetic quality over the seven months. As a reminder, a "Yes" for a sunset means it was in the top 15% of the most beautiful recorded sunsets.
+```{r}
+# looking at the distribution of the Good Sunsets
+sunset_data %>% 
+  ggplot(aes(x = good_sunset)) +
+  geom_bar()
+```
+   
+As we can see, while there were less than 100 sunsets that made the top 15%, an overwhelming amount of just slightly more than 450 sunsets were considered to be not as beautiful. This means that once we have built and fit our models, we'll be able to alert our friends of sunsets that are really worth it.
+
+### Variable Correlation Plot
+
+To get an idea of the relationships between our numeric variables, we'll make a correlation matrix and then make a heat map of the correlation of these predictors.
+```{r}
+# making a correlation matrix and heat map of the predictors
+sunset_data %>%
+  select(where(is.numeric)) %>%
+  cor() %>%
+  corrplot()
+```
+    
+Wow those colors almost resemble those present during a sunset, how crazy. I was not too surprised to see so much correlation between my predictors since they encompass most weather and air quality data available, and therefore will tend to be related. However, a few stood out to me. First, the big blue box in the middle represent all the temperature variables which will obviously be strongly correlated in this instance. I was surprised to find how much of a positive correlation the ozone concentration in parts per million had with my various temperature variables. I was also interested to discover that the cloud cover of a given day was negatively correlated with the carbon monoxide and nitrogen dioxide levels in the air.
+
+# Setting Up Models
+
+## Train/Test Split
+
+First, we'll set our seed, and create our initial split of the data to create our training and testing data sets which we will be referencing and using throughout this project.
 ```{r}
 set.seed(8488)
 
@@ -128,33 +205,16 @@ dim(sunset_test)
 ```
 For splitting the data, I chose a proportion of 0.75 because it allows for more training data, while retaining enough data to be tested since there is a limited amount of observations. The training data has 402 observations while the testing data has 136 observations.  
 
-
-# Visual EDA
-
-```{r}
-# looking at the distribution of the Good Sunsets
-sunset_train %>% 
-  ggplot(aes(x = good_sunset)) +
-  geom_bar()
-
-# making a correlation matrix of the predictors
-sunset_data %>%
-  select(where(is.numeric)) %>%
-  cor() %>%
-  corrplot()
-```
+## Building Our Recipe
 
 ```{r}
-# making the recipe (work in progress...)
+# making the recipe
 sunset_recipe <- recipe(good_sunset ~ tempmax + tempmin + humidity +  
                           cloudcover + aqi + precip + 
                           windspeed +  sealevelpressure + month +
-                          ozone_in_parts_per_million + visibility, 
+                          ozone_in_ppm + visibility, 
                         data=sunset_train) %>%
   step_interact(terms = ~ humidity:cloudcover)
-  #step_rm(Date, City, City.Name, preciptype, State.Name, datetime, sunset, conditions, icon) %>%
-  #step_impute_linear(uvindex, impute_with = imp_vars(all_predictors())) %>%
-  #step_dummy(all_nominal_predictors())
 sunset_recipe %>% prep() %>% juice()
 ```
 

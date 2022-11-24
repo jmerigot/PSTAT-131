@@ -1,0 +1,127 @@
+---
+title: "Homework 6"
+author: "Jules Merigot (8488256)"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(MASS)
+library(dplyr)
+library(tidyverse)
+library(tidymodels)
+library(ISLR)
+library(ISLR2)
+library(discrim)
+library(glmnet)
+library(corrplot)
+library(rpart.plot)
+library(vip)
+library(yardstick)
+library(randomForest)
+library(xgboost)
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\begin{center}
+PSTAT 131/231 Statistical Machine Learning - Fall 2022
+\end{center}
+
+# Tree-Based Models
+
+# Exercise 1
+
+Before we get started, let's load the Pokemon data in into our workspace.
+```{r}
+Pokemon_data <- read.csv(file = "C:/Users/jules/OneDrive/Desktop/homework-5/data/Pokemon.csv")
+```
+
+Let's load the janitor package, and use its `clean_names()` function on the Pokémon data. We'll save the results to work with for the rest of the assignment.
+```{r, warning=FALSE}
+library(janitor)
+
+Pokemon_data <- Pokemon_data %>%
+  clean_names()
+```
+
+For this assignment, we’ll handle the rarer classes by simply filtering them out. Let's filter the entire data set to contain only Pokemon whose `type_1` is Bug, Fire, Grass, Normal, Water, or Psychic.
+```{r, warning=FALSE}
+Pokemon_data <- Pokemon_data %>% 
+  filter(grepl("Bug|Fire|Grass|Normal|Water|Psychic", type_1))
+```
+
+Now that we're done filtering, let's convert `type_1`, `legendary`, and `generation` to factors.
+```{r}
+Pokemon_data$type_1 <- factor(Pokemon_data$type_1)
+Pokemon_data$legendary <- factor(Pokemon_data$legendary)
+Pokemon_data$generation <- factor(Pokemon_data$generation)
+```
+
+Let's perform an initial split of the data, and stratify by the outcome variable.
+```{r}
+set.seed(8488)
+
+Pokemon_split <- initial_split(Pokemon_data, prop=0.70, strata=type_1)
+
+Pokemon_train <- training(Pokemon_split)
+Pokemon_test <- testing(Pokemon_split)
+```
+
+For splitting the data, I chose a proportion of 0.70 because it allows for more training data, while retaining enough data to be tested since there is a limited amount of observations. The training data has 559 observations while the testing data has 241 observations.     
+
+Next, let's use v-fold cross-validation on the training set, using 5 folds. We'll stratify the folds by `type_1` as well.
+```{r}
+Pokemon_folds <- vfold_cv(Pokemon_train, v = 5, strata=type_1)
+```
+In this case, stratifying the folds is useful to ensure that each fold is representative of all strata of the data.   
+
+Let's set up a recipe to predict `type_1` with `legendary`, `generation`, `sp_atk`, `attack`, `speed`, `defense`, `hp`, and `sp_def`. We'll also dummy-code `legendary` and `generation`, as well as center and scale all predictors.
+```{r}
+Pokemon_recipe <- recipe(type_1 ~ legendary + generation + sp_atk + attack +
+                           speed + defense + hp + sp_def, data=Pokemon_train) %>%
+  step_dummy(c(legendary, generation)) %>%
+  step_normalize(all_predictors())
+
+#Pokemon_recipe %>% prep() %>% juice()
+```
+
+## Exercise 2
+
+Let's create a correlation matrix of the training set, using the `corrplot` package.
+```{r}
+Pokemon_train %>%
+  select(where(is.numeric)) %>%
+  cor() %>%
+  corrplot()
+```
+All predictors that we have kept in our recipe seem to have rather strong positive relationships with each other. This seems to make sense overall because if a Pokemon has a strong defense, attack, or speed, for example, the rest its attributes will be strong as well since it will be a more powerful Pokemon.
+
+## Exercise 3
+
+First, we'll set up a decision tree model and workflow. We'll tune the `cost_complexity` hyperparameter.
+```{r}
+tree_spec <- decision_tree() %>%
+  set_engine("rpart")
+
+class_tree_spec <- tree_spec %>%
+  set_mode("classification")
+
+class_tree_wf <- workflow() %>%
+  add_model(class_tree_spec %>% set_args(cost_complexity = tune())) %>%
+  add_formula(type_1 ~ .)
+```
+
+Then, we'll use the same levels we used in Lab 7 – that is, `range = c(-3, -1)`. We'll also specify that the metric we want to optimize is `roc_auc`.
+```{r}
+param_grid <- grid_regular(cost_complexity(range = c(-3, -1)), levels = 10)
+
+tune_res <- tune_grid(
+  class_tree_wf, 
+  resamples = Pokemon_folds, 
+  grid = param_grid, 
+  metrics = metric_set(yardstick::roc_auc)
+)
+
+
+```

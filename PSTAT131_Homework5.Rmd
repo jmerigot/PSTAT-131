@@ -28,8 +28,8 @@ PSTAT 131/231 Statistical Machine Learning - Fall 2022
 
 Before we get started, let's load the Pokemon data in into our workspace.
 ```{r}
-pokemon_data <- read.csv(file = "C:/Users/jules/OneDrive/Desktop/homework-5/data/Pokemon.csv")
-head(pokemon_data)
+Pokemon_data <- read.csv(file = "C:/Users/jules/OneDrive/Desktop/homework-5/data/Pokemon.csv")
+head(Pokemon_data)
 ```
 
 ## Exercise 1
@@ -38,7 +38,7 @@ Let's load the janitor package, and use its `clean_names()` function on the PokÃ
 ```{r, warning=FALSE}
 library(janitor)
 
-Pokemon_data <- pokemon_data %>%
+Pokemon_data <- Pokemon_data %>%
   clean_names()
 head(Pokemon_data)
 ```
@@ -55,8 +55,8 @@ Pokemon_data %>%
 There are 18 classes of the outcome `type_1`, which means there are 18 different types of Pokemon. While there are many Pokemon of the "Water" type, there are very few Pokemon of the "Flying" type.   
 For this assignment, weâ€™ll handle the rarer classes by simply filtering them out. Let's filter the entire data set to contain only Pokemon whose `type_1` is Bug, Fire, Grass, Normal, Water, or Psychic.
 ```{r, warning=FALSE}
-Pokemon_data <- subset(Pokemon_data, type_1 == c("Bug", "Fire", "Grass", 
-                                                 "Normal", "Water", "Psychic"))
+Pokemon_data <- Pokemon_data %>% 
+  filter(grepl("Bug|Fire|Grass|Normal|Water|Psychic", type_1))
 ```
 
 Now that we're done filtering, let's convert `type_1`, `legendary`, and `generation` to factors.
@@ -128,6 +128,7 @@ tune_res <- tune_grid(
   grid = pen_mix_grid
 )
 ```
+
 We now use `autoplot()` on the results. 
 ```{r}
 autoplot(tune_res)
@@ -159,7 +160,7 @@ augment(lasso_final_fit, new_data = Pokemon_test) %>%
 
 Almost there! Now let's calculate the overall ROC AUC on the testing set.
 ```{r}
-roc <- augment(lasso_final_fit, Pokemon_test)
+roc <- augment(lasso_final_fit, Pokemon_test, type='prob')
 
 roc %>%
   roc_auc(type_1, c(.pred_Bug, .pred_Fire, .pred_Grass, .pred_Normal, 
@@ -180,4 +181,4 @@ augment(lasso_final_fit, new_data = Pokemon_test) %>%
   conf_mat(truth = type_1, estimate = .pred_class) %>%
   autoplot(type = "heatmap")
 ```
-As we can see from our overall ROC AUC value of 0.5879 on the testing dataset, our model did not do too great. Generally, AUC values between 0.6 and 0.5 are considered to be poor results. However, our model did a surprisingly good job at predicting Pokemon of types Normal and Fire, while doing a worse job of predicting Pokemon of types Bug and Water. Since Normal type is the second most common Pokemon type in our dataset, it makes sense that our modle could predict it better since it has more training data to work with in that category. However, this contradicts the fact that Water type is the most common but has one of the worst ROC AUC values. The most likely reason for this, is that Water types have a large variety of possible secondary types (`type_2`), which is most likely interfering with the prediction quality of our model. This is confirmed when we look at Fire type, which has a smaller variety of second types.
+As we can see from our overall ROC AUC value of 0.61 on the testing dataset, our model did not do too great. Generally, AUC values between 0.7 and 0.6 are considered to be poor results. However, our model did a surprisingly good job at predicting Pokemon of types Normal, Psychic, and Fire, while doing a worse job of predicting Pokemon of types Grass and Water. Since Normal type is the second most common Pokemon type in our dataset, it makes sense that our model could predict it better since it has more training data to work with in that category. However, this contradicts the fact that Water type is the most common but has one of the worst ROC AUC values. The most likely reason for this, is that Water types have a large variety of possible secondary types (`type_2`), which is most likely interfering with the prediction quality of our model. This is confirmed when we look at Fire type, which has a smaller variety of second types.
