@@ -188,6 +188,15 @@ sunset_data %>%
     
 Wow those colors almost resemble those present during a sunset, how crazy. I was not too surprised to see so much correlation between my predictors since they encompass most weather and air quality data available, and therefore will tend to be related. However, a few stood out to me. First, the big blue box in the middle represent all the temperature variables which will obviously be strongly correlated in this instance. I was surprised to find how much of a positive correlation the ozone concentration in parts per million had with my various temperature variables. I was also interested to discover that the cloud cover of a given day was negatively correlated with the carbon monoxide and nitrogen dioxide levels in the air.
 
+### Air Quality Index (AQI)
+
+
+```{r}
+ggplot(sunset_data, aes(aqi)) + 
+  geom_bar(aes(fill = good_sunset)) +
+  scale_fill_manual(values = c("#0066CC", "#FF6633"))
+```
+
 # Setting Up Models
 
 ## Train/Test Split
